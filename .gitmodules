@@ -1,0 +1,6 @@
+[submodule "SHUD"]
+	path = SHUD
+	url = https://github.com/DankerMu/SHUD-up.git
+[submodule "AutoSHUD"]
+	path = AutoSHUD
+	url = https://github.com/DankerMu/AutoSHUD.git
