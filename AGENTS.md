@@ -9,10 +9,10 @@
   - 作用：记录项目说明、文档、脚本，以及两个子模块所指向的 **commit 指针**。
 - **子模块 1**：`SHUD/`
   - fork（推送用）：`origin = https://github.com/DankerMu/SHUD-up.git`
-  - 上游（同步/提 PR 目标）：`upstream = https://github.com/SHUD-System/SHUD.git`（默认分支 `master`）
+  - 上游（仅用于同步，可选）：`upstream = https://github.com/SHUD-System/SHUD.git`（默认分支 `master`）
 - **子模块 2**：`AutoSHUD/`
   - fork（推送用）：`origin = https://github.com/DankerMu/AutoSHUD.git`
-  - 上游（同步/提 PR 目标）：`upstream = https://github.com/SHUD-System/AutoSHUD.git`（默认分支 `master`）
+  - 上游（仅用于同步，可选）：`upstream = https://github.com/SHUD-System/AutoSHUD.git`（默认分支 `master`）
 
 ## Submodule 模式的关键点
 
@@ -37,17 +37,17 @@
 3. 修改后：`git add -A && git commit -m "<msg>"`
 4. 推送：`git push -u origin feat/<topic>`
 
-### 提 Issue / PR（分别在各自上游仓库进行）
+### 提 Issue / PR（只在个人仓库进行）
 
-Issue（在上游仓库）：
+Issue（在个人仓库）：
 
-- `gh issue create --repo SHUD-System/AutoSHUD`
-- `gh issue create --repo SHUD-System/SHUD`
+- `gh issue create --repo DankerMu/AutoSHUD`
+- `gh issue create --repo DankerMu/SHUD-up`
 
-PR（从个人 fork 的分支提到上游 `master`）：
+PR（从分支提到个人仓库 `master`）：
 
-- `gh pr create --repo SHUD-System/AutoSHUD --base master --head DankerMu:feat/<topic>`
-- `gh pr create --repo SHUD-System/SHUD --base master --head DankerMu:feat/<topic>`
+- `gh pr create --repo DankerMu/AutoSHUD --base master --head feat/<topic>`
+- `gh pr create --repo DankerMu/SHUD-up --base master --head feat/<topic>`
 
 ### 同步上游更新到个人 fork
 
@@ -65,4 +65,3 @@ PR（从个人 fork 的分支提到上游 `master`）：
 
 - 父仓库中不要把子模块当“普通目录”去 `git add SHUD/ AutoSHUD/`（submodule 已由 `.gitmodules` 管理）。
 - `qhh/` 为本地大数据/输出目录，已在 `.gitignore` 中忽略；如需共享建议使用外部存储或 Git LFS（按需）。
-
