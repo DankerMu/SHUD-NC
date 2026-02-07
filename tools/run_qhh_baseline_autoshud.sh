@@ -2,11 +2,4 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-config="${repo_root}/projects/qhh/autoshud.baseline.txt"
-
-cd "${repo_root}/AutoSHUD"
-Rscript Step1_RawDataProcessng.R "${config}"
-Rscript Step2_DataSubset.R "${config}"
-Rscript Step3_BuidModel.R "${config}"
-
-echo "Done. Outputs under: ${repo_root}/runs/qhh/baseline"
+python3 "${repo_root}/tools/shudnc.py" "${repo_root}/projects/qhh/shud.yaml" autoshud --profile baseline

@@ -46,6 +46,11 @@
 1. `git clone https://github.com/DankerMu/SHUD-NC.git`
 2. `cd SHUD-NC && git submodule update --init --recursive`
 
+### 运行示例项目（单一入口：`projects/<case>/shud.yaml`）
+
+- 校验：`python3 tools/shudnc.py projects/qhh/shud.yaml validate --profile baseline`
+- 运行 baseline：`python3 tools/shudnc.py projects/qhh/shud.yaml run --profile baseline`
+
 ### 在子模块开发并推送到个人 fork
 
 以 `AutoSHUD/` 为例（`SHUD/` 同理）：

@@ -26,22 +26,23 @@ AutoSHUD 的 Step1 需要研究区的边界/河网/DEM（以及可选湖泊）�
 
 ### 3) 运行（推荐从 submodule 目录启动）
 
-使用配置：`projects/qhh/autoshud.baseline.txt`
+单一入口配置：`projects/qhh/shud.yaml`
 
-命令（从仓库根目录执行）：
+推荐命令（从仓库根目录执行）：
 
-1. `cd AutoSHUD`
-2. `Rscript Step1_RawDataProcessng.R ../projects/qhh/autoshud.baseline.txt`
-3. `Rscript Step2_DataSubset.R ../projects/qhh/autoshud.baseline.txt`
-4. `Rscript Step3_BuidModel.R ../projects/qhh/autoshud.baseline.txt`
+1. 校验数据与路径：
+   - `python3 tools/shudnc.py projects/qhh/shud.yaml validate --profile baseline`
+2. 一键跑完 baseline（AutoSHUD Step1–3 + SHUD 运行）：
+   - `python3 tools/shudnc.py projects/qhh/shud.yaml run --profile baseline`
 
-或使用一键脚本：
+也可以用快捷脚本：
 
-- `tools/run_qhh_baseline_autoshud.sh`
+- `bash tools/run_qhh_baseline.sh`
 
 产物默认会写到：
 
 - AutoSHUD：`runs/qhh/baseline/DataPre/`、`runs/qhh/baseline/input/qhh/`
 - forcing CSV（baseline）：`runs/qhh/baseline/forcing/`
+- 自动生成的 AutoSHUD 配置：`runs/qhh/baseline/config/autoshud.generated.txt`
 
 后续你可以用 `SHUD/` 子模块编译并运行求解器，读取 `runs/qhh/baseline/input/qhh/` 作为输入目录。
