@@ -5,4 +5,4 @@
 当前提供：
 
 - `tools/run_qhh_baseline_autoshud.sh`：运行 QHH 的 baseline（AutoSHUD Step1–Step3，生成 SHUD 静态输入 + forcing CSV）
-
+- `tools/run_qhh_baseline.sh`：一键跑完 baseline（AutoSHUD Step1–Step3 + 调用 `SHUD/shud` 运行）
