@@ -81,6 +81,10 @@ profiles:
         product: cmfd2
         dir: Data/Forcing/CMFD_2017_2018
         adapter: configs/forcing/cmfd2.yaml
+        # Switch to ERA5 (QHH subset example):
+        # product: era5
+        # dir: Data/Forcing/ERA5/qhh
+        # adapter: configs/forcing/era5.yaml
       output_mode: netcdf
       output:
         schema: configs/output/ugrid.yaml
