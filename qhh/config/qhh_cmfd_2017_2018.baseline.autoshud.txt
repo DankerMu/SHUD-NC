@@ -1,0 +1,55 @@
+# QHH baseline (AutoSHUD -> SHUD, CSV forcing)
+# 说明：
+# - 推荐从仓库根目录执行：`cd AutoSHUD && Rscript Step*.R ../qhh/config/<this-file>`
+# - 路径均按 AutoSHUD 目录为当前工作目录来写（即相对 AutoSHUD/）
+
+# Basic
+prjname qhh
+startyear 2017
+endyear 2018
+dir.out ../runs/qhh/baseline
+
+# Spatial Data (local, not committed)
+fsp.crs ../qhh/Data/meritbasin_wbd1_32647.shp
+fsp.wbd ../qhh/Data/meritbasin_wbd1_32647.shp
+fsp.stm ../qhh/Data/meritbasin_riv1.shp
+fr.dem ../qhh/Data/gdem.tif
+
+# Lake (optional)
+fsp.lake ../qhh/Data/lake.shp
+
+# Forcing:
+# 0 LDAS mode: 0.1 CLDAS, 0.2 FLDAS, 0.3 GLDAS 0.4 NLDAS 0.5 CMFD 0.6 CMIP6
+# 1 Local data: 1.1 Points of metereo-station 1.2 Polygon of coverage
+Forcing 0.5
+dir.ldas ../Data/Forcing/CMFD_2017_2018
+dout.forc ../runs/qhh/baseline/forcing
+
+# Soil/Geol:
+# 0-global soil data. 0.1 HWSD, 0.2 ISRIC
+# 1-local map + soil texture table. 1.1 Raster, 1.2 Spatial polygon.
+Soil 0.1
+dir.soil ../Data/Soil/HWSD_RASTER
+
+# Landuse
+# 0-global   0.1 USGS LCI
+# 1-local data with attribute table. 1.1 Raster, 1.2 Spatial Polygon
+Landuse 0.1
+fn.landuse ../Data/Landuse/USGS_LCI/LCType.tif
+
+# parameters
+NumCells 3000
+AqDepth 8
+MaxArea 20
+MinAngle 30
+tol.wb  1000
+tol.rivlen  3000
+RivWidth  10
+RivDepth  6
+DistBuffer 2000
+flowpath 0
+QuickMode 0
+MAX_SOLVER_STEP 6
+CRYOSPHERE 0
+STARTDAY 1
+ENDDAY 730

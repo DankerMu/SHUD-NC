@@ -2,6 +2,19 @@
 
 本仓库用于组织/管理 SHUD 相关工作流与文档；核心代码分别位于两个子模块中。
 
+## 目录结构约定（推荐）
+
+- `SHUD/`：SHUD 求解器源码（submodule）
+- `AutoSHUD/`：AutoSHUD 流水线脚本（submodule）
+- `docs/`：设计/迁移文档（可入库）
+- `qhh/`：**官方示例（QHH）**（仅入库轻量配置/说明；大数据与产物不入库）
+  - 入库：`qhh/README.md`、`qhh/config/**`、`qhh/scripts/**`
+  - 不入库：`qhh/Data/`、`qhh/forcing*/`、`qhh/Calibration/` 等大目录（见 `.gitignore`）
+- `Data/`：原始外部数据（不入库；仅保留 `Data/README.md` 说明结构）
+- `runs/`：可再生中间结果与运行产物（不入库；仅保留 `runs/README.md`）
+
+> 数据目录结构（多数据源并存）请以 `Data/README.md` 为准：`Soil/<dataset>/`、`Landuse/<dataset>/`、`Forcing/<dataset>/`。
+
 ## 仓库关系
 
 - **本仓库（父仓库）**：`SHUD-NC`（私有）
@@ -64,4 +77,4 @@ PR（从分支提到个人仓库 `master`）：
 ## 注意事项
 
 - 父仓库中不要把子模块当“普通目录”去 `git add SHUD/ AutoSHUD/`（submodule 已由 `.gitmodules` 管理）。
-- `qhh/` 为本地大数据/输出目录，已在 `.gitignore` 中忽略；如需共享建议使用外部存储或 Git LFS（按需）。
+- 大数据与产物不要进 Git：`Data/`、`runs/`、以及 `qhh/` 下的大目录默认被 `.gitignore` 忽略（但 `qhh/config/**` 等轻量内容会入库）。

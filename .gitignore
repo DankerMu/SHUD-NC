@@ -1,6 +1,28 @@
+# OS / editor junk
 .DS_Store
 **/.DS_Store
 
-# Local large data / outputs (do not commit to GitHub)
-qhh/
+# R / IDE
+**/.Rhistory
+**/.Rproj.user/
+**/.RData
+**/.Ruserdata
 
+# Python
+**/__pycache__/
+
+# Local large datasets (keep external; do not commit)
+Data/*
+!Data/README.md
+
+# Generated runs / outputs (do not commit)
+runs/*
+!runs/README.md
+
+# qhh official example (version only lightweight docs/configs/scripts)
+qhh/*
+!qhh/README.md
+!qhh/config/
+!qhh/config/**
+!qhh/scripts/
+!qhh/scripts/**
