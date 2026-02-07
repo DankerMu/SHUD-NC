@@ -20,20 +20,24 @@
 
 AutoSHUD 的 Step1 需要研究区的边界/河网/DEM（以及可选湖泊）。默认示例配置引用：
 
-`qhh/Data/meritbasin_wbd1_32647.*`、`qhh/Data/meritbasin_riv1.*`、`qhh/Data/gdem.tif`、`qhh/Data/lake.*`
+`Data/projects/qhh/raw/spatial/meritbasin_wbd1_32647.*`、`Data/projects/qhh/raw/spatial/meritbasin_riv1.*`、`Data/projects/qhh/raw/spatial/gdem.tif`、`Data/projects/qhh/raw/spatial/lake.*`
 
-这些文件目前不随仓库提交；请在本地准备好（可从你现有的 QHH 数据目录拷贝/软链接到 `qhh/Data/`）。
+这些文件目前不随仓库提交；请在本地准备好（可从你现有的 QHH 数据目录拷贝/软链接到 `Data/projects/qhh/raw/spatial/`）。
 
 ### 3) 运行（推荐从 submodule 目录启动）
 
-使用配置：`qhh/config/qhh_cmfd_2017_2018.baseline.autoshud.txt`
+使用配置：`projects/qhh/autoshud.baseline.txt`
 
 命令（从仓库根目录执行）：
 
 1. `cd AutoSHUD`
-2. `Rscript Step1_RawDataProcessng.R ../qhh/config/qhh_cmfd_2017_2018.baseline.autoshud.txt`
-3. `Rscript Step2_DataSubset.R ../qhh/config/qhh_cmfd_2017_2018.baseline.autoshud.txt`
-4. `Rscript Step3_BuidModel.R ../qhh/config/qhh_cmfd_2017_2018.baseline.autoshud.txt`
+2. `Rscript Step1_RawDataProcessng.R ../projects/qhh/autoshud.baseline.txt`
+3. `Rscript Step2_DataSubset.R ../projects/qhh/autoshud.baseline.txt`
+4. `Rscript Step3_BuidModel.R ../projects/qhh/autoshud.baseline.txt`
+
+或使用一键脚本：
+
+- `tools/run_qhh_baseline_autoshud.sh`
 
 产物默认会写到：
 
@@ -41,4 +45,3 @@ AutoSHUD 的 Step1 需要研究区的边界/河网/DEM（以及可选湖泊）�
 - forcing CSV（baseline）：`runs/qhh/baseline/forcing/`
 
 后续你可以用 `SHUD/` 子模块编译并运行求解器，读取 `runs/qhh/baseline/input/qhh/` 作为输入目录。
-

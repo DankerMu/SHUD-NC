@@ -1,6 +1,6 @@
 # QHH baseline (AutoSHUD -> SHUD, CSV forcing)
 # 说明：
-# - 推荐从仓库根目录执行：`cd AutoSHUD && Rscript Step*.R ../qhh/config/<this-file>`
+# - 推荐从仓库根目录执行：`cd AutoSHUD && Rscript Step*.R ../projects/qhh/autoshud.baseline.txt`
 # - 路径均按 AutoSHUD 目录为当前工作目录来写（即相对 AutoSHUD/）
 
 # Basic
@@ -10,13 +10,13 @@ endyear 2018
 dir.out ../runs/qhh/baseline
 
 # Spatial Data (local, not committed)
-fsp.crs ../qhh/Data/meritbasin_wbd1_32647.shp
-fsp.wbd ../qhh/Data/meritbasin_wbd1_32647.shp
-fsp.stm ../qhh/Data/meritbasin_riv1.shp
-fr.dem ../qhh/Data/gdem.tif
+fsp.crs ../Data/projects/qhh/raw/spatial/meritbasin_wbd1_32647.shp
+fsp.wbd ../Data/projects/qhh/raw/spatial/meritbasin_wbd1_32647.shp
+fsp.stm ../Data/projects/qhh/raw/spatial/meritbasin_riv1.shp
+fr.dem ../Data/projects/qhh/raw/spatial/gdem.tif
 
 # Lake (optional)
-fsp.lake ../qhh/Data/lake.shp
+fsp.lake ../Data/projects/qhh/raw/spatial/lake.shp
 
 # Forcing:
 # 0 LDAS mode: 0.1 CLDAS, 0.2 FLDAS, 0.3 GLDAS 0.4 NLDAS 0.5 CMFD 0.6 CMIP6

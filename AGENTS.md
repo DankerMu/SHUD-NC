@@ -5,11 +5,16 @@
 ## 目录结构约定（推荐）
 
 - `SHUD/`：SHUD 求解器源码（submodule）
+  - **核心开发目标都落在这里**：forcing 直接读 NetCDF、输出写标准 NetCDF
 - `AutoSHUD/`：AutoSHUD 流水线脚本（submodule）
+  - 负责 **静态输入**（mesh/att/riv/soil/lc/para…）生成；forcing CSV 保留作为 baseline/兼容
 - `docs/`：设计/迁移文档（可入库）
-- `qhh/`：**官方示例（QHH）**（仅入库轻量配置/说明；大数据与产物不入库）
-  - 入库：`qhh/README.md`、`qhh/config/**`、`qhh/scripts/**`
-  - 不入库：`qhh/Data/`、`qhh/forcing*/`、`qhh/Calibration/` 等大目录（见 `.gitignore`）
+- `projects/`：项目/流域的**可版本化配置**（官方示例也在这里）
+  - `projects/qhh/`：QHH 官方示例（baseline 对照 + 未来 NetCDF 改造目标配置）
+- `configs/`：forcing 产品适配、输出 schema 等**可复用配置**（可入库）
+- `tools/`：一键运行/校验/对比脚本（可入库）
+- `testdata/`：可随仓库提交的小样本数据（用于测试/回归；可入库）
+- `qhh/`：本地 legacy 工作区（可能包含大数据/旧脚本/旧产物；不入库，见 `.gitignore`）
 - `Data/`：原始外部数据（不入库；仅保留 `Data/README.md` 说明结构）
 - `runs/`：可再生中间结果与运行产物（不入库；仅保留 `runs/README.md`）
 
@@ -77,4 +82,4 @@ PR（从分支提到个人仓库 `master`）：
 ## 注意事项
 
 - 父仓库中不要把子模块当“普通目录”去 `git add SHUD/ AutoSHUD/`（submodule 已由 `.gitmodules` 管理）。
-- 大数据与产物不要进 Git：`Data/`、`runs/`、以及 `qhh/` 下的大目录默认被 `.gitignore` 忽略（但 `qhh/config/**` 等轻量内容会入库）。
+- 大数据与产物不要进 Git：`Data/`、`runs/`、以及 `qhh/` 默认被 `.gitignore` 忽略。

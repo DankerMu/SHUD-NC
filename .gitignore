@@ -19,10 +19,5 @@ Data/*
 runs/*
 !runs/README.md
 
-# qhh official example (version only lightweight docs/configs/scripts)
-qhh/*
-!qhh/README.md
-!qhh/config/
-!qhh/config/**
-!qhh/scripts/
-!qhh/scripts/**
+# Local legacy workspace (large; not versioned)
+/qhh/

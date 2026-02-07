@@ -8,6 +8,13 @@
 
 ```
 Data/
+  projects/
+    qhh/
+      raw/
+        spatial/
+          # 边界/河网/DEM/湖泊等（不入库）
+          # e.g. meritbasin_wbd1_32647.shp, meritbasin_riv1.shp, gdem.tif, lake.shp
+
   Soil/
     HWSD_RASTER/
       hwsd.bil
@@ -47,5 +54,4 @@ Data/
 
 - `Soil/`、`Landuse/`、`Forcing/` **每类下面允许多个数据集并存**，用子目录名区分（例如 `HWSD_RASTER`、`USGS_LCI`、`CMFD_2017_2018`）。
 - **原始数据尽量只读**：裁剪/投影/中间产物/模型输入输出请写到 `runs/`（见 `runs/README.md`）。
-- **示例（QHH）配置**会在 `qhh/config/` 里指向这些目录；你也可以在自己的 case 下新增配置文件来切换数据源。
-
+- **示例（QHH）配置**会在 `projects/qhh/` 里指向这些目录；你也可以在 `projects/<your-case>/` 下新增配置文件来切换数据源与时间范围。

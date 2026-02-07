@@ -1,0 +1,31 @@
+name: era5
+title: "ERA5 (subset) -> SHUD forcing"
+
+# NOTE: Placeholder/spec file. We will fill the exact variable names/units
+# once we lock down the ERA5 files we want to support (single-file-per-day,
+# single-file-per-month, pressure-level vs single-level, etc).
+#
+# Goal: map ERA5 variables to SHUD forcing:
+# - Precip (mm/day), Temp (C), RH (0-1), Wind (m/s), RN (W/m2)
+
+layout:
+  # Current local example (QHH subset):
+  #   Data/Forcing/ERA5/qhh/2017/ERA5_20170104.nc
+  #   Data/Forcing/ERA5/qhh/2018/ERA5_20180105.nc
+  file_pattern: "ERA5_{yyyymmdd}.nc"
+
+netcdf:
+  dims:
+    time: "time"
+    lat: "latitude"
+    lon: "longitude"
+
+conversion:
+  # To be confirmed from the NetCDF metadata:
+  # - precip often in m (accumulated) or kg m-2; needs daily accumulation.
+  # - temperature often in K -> C.
+  # - RH may be provided directly or derived from (q, p, T) or (dewpoint, T).
+  notes:
+    - "Confirm variable names in the ERA5 NetCDFs (tp, t2m, d2m/q, sp, u10/v10, ssrd/strd...)."
+    - "Define accumulation window for precipitation and radiation."
+

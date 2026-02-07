@@ -1,0 +1,59 @@
+name: cmfd2
+title: "CMFD v2.0 (3-hour, 0.1deg) -> SHUD forcing"
+
+# Purpose:
+# - Provide a single place to define how to read a forcing product from NetCDF
+#   and convert it to SHUD's 5 forcing variables:
+#   Precip (mm/day), Temp (C), RH (0-1), Wind (m/s), RN (W/m2).
+#
+# NOTE: This file is a spec/template for the SHUD NetCDF-forcing implementation.
+
+layout:
+  # Example directory layout (relative to data_root):
+  #   Prec/prec_CMFD_*_201701.nc
+  #   Temp/temp_CMFD_*_201701.nc
+  #   SHum/shum_CMFD_*_201701.nc
+  #   SRad/srad_CMFD_*_201701.nc
+  #   Wind/wind_CMFD_*_201701.nc
+  #   Pres/pres_CMFD_*_201701.nc
+  variables_dir:
+    Prec: "Prec"
+    Temp: "Temp"
+    SHum: "SHum"
+    SRad: "SRad"
+    Wind: "Wind"
+    Pres: "Pres"
+  file_pattern: "{var_lower}_CMFD_*_{yyyymm}.nc"
+
+netcdf:
+  dims:
+    time: "time"
+    lat: "lat"
+    lon: "lon"
+  var_names:
+    Prec: "prec"
+    Temp: "temp"
+    SHum: "shum"
+    SRad: "srad"
+    Wind: "wind"
+    Pres: "pres"
+
+conversion:
+  # Mirrors AutoSHUD/Rfunction/LDAS_UnitConvert.R:unitConvert.CMFD
+  precip:
+    # CMFD Prec is treated as mm/hr in AutoSHUD.
+    to_mm_per_day: "Prec * 24"
+    min_mm_per_day: 0.0001
+  temperature:
+    to_celsius: "Temp - 273.15"
+  rh:
+    # specific humidity + pressure + temperature -> relative humidity (%), then /100
+    # rh = 0.263*Pres*SHum/exp(17.67*(Temp-273.15)/(Temp-29.65))
+    formula: "0.263*Pres*SHum/exp(17.67*(Temp-273.15)/(Temp-29.65))"
+    clamp_percent_max: 100
+    to_ratio: "rh_percent / 100"
+  wind:
+    to_m_per_s: "abs(Wind)"
+  rn:
+    to_w_per_m2: "SRad"
+

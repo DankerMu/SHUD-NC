@@ -1,0 +1,36 @@
+name: qhh
+title: "QHH official example"
+
+# Project-level intent (kept in meta-repo, versioned).
+# This file is for humans + future tooling (tools/).
+#
+# Conventions:
+# - Paths are relative to repo root.
+# - Large raw data lives under Data/ (not committed).
+# - Generated outputs live under runs/ (not committed).
+
+time:
+  start: "2017-01-01"
+  end: "2018-12-31"
+
+spatial_inputs:
+  wbd: "Data/projects/qhh/raw/spatial/meritbasin_wbd1_32647.shp"
+  stm: "Data/projects/qhh/raw/spatial/meritbasin_riv1.shp"
+  dem: "Data/projects/qhh/raw/spatial/gdem.tif"
+  lake: "Data/projects/qhh/raw/spatial/lake.shp"
+
+datasets:
+  soil:
+    dataset: "HWSD_RASTER"
+    path: "Data/Soil/HWSD_RASTER"
+  landuse:
+    dataset: "USGS_LCI"
+    path: "Data/Landuse/USGS_LCI/LCType.tif"
+  forcing:
+    dataset: "CMFD_2017_2018"
+    path: "Data/Forcing/CMFD_2017_2018"
+
+runs:
+  baseline: "runs/qhh/baseline"
+  nc: "runs/qhh/nc"
+
