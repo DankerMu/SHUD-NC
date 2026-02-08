@@ -56,6 +56,18 @@ def _as_float(value: Any, *, key: str) -> float:
         raise ConfigError(f"Expected number for {key}, got: {value!r}") from exc
 
 
+def _as_str(value: Any, *, key: str) -> str:
+    if value is None:
+        raise ConfigError(f"Missing required config value: {key}")
+    if isinstance(value, str):
+        s = value.strip()
+    else:
+        s = str(value).strip()
+    if not s:
+        raise ConfigError(f"Empty string for config value: {key}")
+    return s
+
+
 def _resolve_path(repo_root: Path, path_value: str) -> Path:
     p = Path(path_value)
     if p.is_absolute():
@@ -173,7 +185,7 @@ def _autoshud_config_from_yaml(
     end_year = _as_int(_get(cfg, "time.end_year"), key="time.end_year")
 
     profile_cfg = _get(cfg, f"profiles.{profile}")
-    run_dir = _resolve_path(repo_root, _get(profile_cfg, "run_dir"))
+    run_dir = _resolve_path(repo_root, _as_str(_get(profile_cfg, "run_dir"), key=f"profiles.{profile}.run_dir"))
 
     auto_cfg = _get(profile_cfg, "autoshud", required=False)
     baseline_auto_cfg = _get(cfg, "profiles.baseline.autoshud", required=False)
@@ -199,27 +211,48 @@ def _autoshud_config_from_yaml(
         forcing_dir_val = shud_forcing_cfg.get("dir")
     if forcing_dir_val is None and isinstance(baseline_auto_cfg, dict):
         forcing_dir_val = _get(baseline_auto_cfg, "forcing.dir_ldas", required=False)
-    forcing_dir = _resolve_path(repo_root, str(forcing_dir_val))
+    if forcing_dir_val is None:
+        raise ConfigError(
+            "Missing forcing directory for AutoSHUD config. Provide either:\n"
+            f"- profiles.{profile}.autoshud.forcing.dir_ldas\n"
+            f"- (NetCDF forcing) profiles.{profile}.shud.forcing.dir\n"
+            "- or profiles.baseline.autoshud.forcing.dir_ldas for fallback"
+        )
+    forcing_dir = _resolve_path(
+        repo_root,
+        _as_str(
+            forcing_dir_val,
+            key=f"profiles.{profile}.autoshud.forcing.dir_ldas (or profiles.{profile}.shud.forcing.dir when forcing_mode=netcdf)",
+        ),
+    )
 
     forcing_csv_dir_val = forcing_cfg.get("csv_dir")
     if forcing_csv_dir_val is None and _get(profile_cfg, "autoshud", required=False) is None:
         forcing_csv_dir_val = str(run_dir / "forcing")
     if forcing_csv_dir_val is None and isinstance(baseline_auto_cfg, dict):
         forcing_csv_dir_val = _get(baseline_auto_cfg, "forcing.csv_dir", required=False)
-    forcing_csv_dir = _resolve_path(repo_root, str(forcing_csv_dir_val))
+    if forcing_csv_dir_val is None:
+        raise ConfigError(
+            "Missing forcing csv_dir for AutoSHUD config. Provide either:\n"
+            f"- profiles.{profile}.autoshud.forcing.csv_dir\n"
+            "- or profiles.baseline.autoshud.forcing.csv_dir for fallback"
+        )
+    forcing_csv_dir = _resolve_path(
+        repo_root, _as_str(forcing_csv_dir_val, key=f"profiles.{profile}.autoshud.forcing.csv_dir")
+    )
 
     soil_cfg = _get(cfg, "datasets.soil")
     soil_code = _as_float(_get(soil_cfg, "code"), key="datasets.soil.code")
-    soil_dir = _resolve_path(repo_root, _get(soil_cfg, "dir"))
+    soil_dir = _resolve_path(repo_root, _as_str(_get(soil_cfg, "dir"), key="datasets.soil.dir"))
 
     landuse_cfg = _get(cfg, "datasets.landuse")
     landuse_code = _as_float(_get(landuse_cfg, "code"), key="datasets.landuse.code")
-    landuse_file = _resolve_path(repo_root, _get(landuse_cfg, "file"))
+    landuse_file = _resolve_path(repo_root, _as_str(_get(landuse_cfg, "file"), key="datasets.landuse.file"))
 
     spatial_cfg = _get(cfg, "spatial")
-    wbd = _resolve_path(repo_root, _get(spatial_cfg, "wbd"))
-    stm = _resolve_path(repo_root, _get(spatial_cfg, "stm"))
-    dem = _resolve_path(repo_root, _get(spatial_cfg, "dem"))
+    wbd = _resolve_path(repo_root, _as_str(_get(spatial_cfg, "wbd"), key="spatial.wbd"))
+    stm = _resolve_path(repo_root, _as_str(_get(spatial_cfg, "stm"), key="spatial.stm"))
+    dem = _resolve_path(repo_root, _as_str(_get(spatial_cfg, "dem"), key="spatial.dem"))
     crs_ref_val = _get(spatial_cfg, "crs_ref", required=False)
     crs_ref = _resolve_path(repo_root, crs_ref_val) if isinstance(crs_ref_val, str) else None
     lake_val = _get(spatial_cfg, "lake", required=False)

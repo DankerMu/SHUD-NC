@@ -64,14 +64,40 @@ class LegacyBin:
 
 
 def _read_legacy_bin(path: str) -> LegacyBin:
-    with open(path, "rb") as f:
-        header = f.read(1024)
-        if len(header) != 1024:
-            raise ValueError(f"Invalid legacy bin header size: {path}")
+    def read_exact(f: Any, n: int, *, what: str) -> bytes:
+        blob = f.read(int(n))
+        if len(blob) != int(n):
+            raise ValueError(
+                f"Truncated legacy bin while reading {what}: {path} (expected {n} bytes, got {len(blob)})"
+            )
+        return blob
 
-        start_time = struct.unpack("d", f.read(8))[0]
-        num_var = int(struct.unpack("d", f.read(8))[0])
-        icol = list(struct.unpack(f"{num_var}d", f.read(8 * num_var)))
+    with open(path, "rb") as f:
+        header = read_exact(f, 1024, what="1024-byte header")
+        header_text = ""
+        try:
+            header_text = header.split(b"\x00", 1)[0].decode("utf-8", errors="replace").strip()
+        except Exception:
+            header_text = ""
+        if header_text and "SHUD" not in header_text:
+            # Not fatal, but helpful when users accidentally point at the wrong file.
+            raise ValueError(f"Legacy bin header does not look like SHUD output: {path}")
+
+        start_time = struct.unpack("d", read_exact(f, 8, what="start_time (double)"))[0]
+        if not math.isfinite(float(start_time)):
+            raise ValueError(f"Invalid legacy bin start_time (non-finite): {path}: {start_time!r}")
+
+        num_var_raw = struct.unpack("d", read_exact(f, 8, what="num_var (double)"))[0]
+        if not math.isfinite(float(num_var_raw)):
+            raise ValueError(f"Invalid legacy bin num_var (non-finite): {path}: {num_var_raw!r}")
+        num_var = int(round(float(num_var_raw)))
+        if abs(float(num_var_raw) - float(num_var)) > 1e-6:
+            raise ValueError(f"Invalid legacy bin num_var (not an integer): {path}: {num_var_raw!r}")
+        if num_var <= 0 or num_var > 100000:
+            raise ValueError(f"Invalid legacy bin num_var (out of range): {path}: {num_var}")
+
+        icol_bytes = read_exact(f, 8 * num_var, what="icol array (num_var doubles)")
+        icol = list(struct.unpack(f"{num_var}d", icol_bytes))
         icol_1based = [int(round(x)) for x in icol]
 
         times: List[float] = []
@@ -242,4 +268,3 @@ def main(argv: Sequence[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-
