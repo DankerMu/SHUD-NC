@@ -32,18 +32,23 @@
 ### 2.2 `<prj>.cfg.ncoutput`（KEY VALUE）
 建议文件：`input/<prj>/<prj>.cfg.ncoutput`：
 
-**路径与文件组织**
-- `OUTPUT_NETCDF_DIR <path>`：输出目录（相对/绝对）；若相对，则相对 **运行目录（run_dir）** 或 `output/<prj>.out`（需在实现中固定一条规则并记录）
-- `OUTPUT_NETCDF_PREFIX <string>`（可选，默认 `<prj>`）
+> 重要：`projects/<case>/shud.yaml` 中引用的 schema YAML（如 `configs/output/*.yaml`）是 **runner-only** 模板；
+> `tools/shudnc.py render-shud-cfg` 会把它们渲染为 SHUD 运行时读取的 KEY VALUE `*.cfg`（单一真相），SHUD **不读 YAML**。
 
-**格式与性能**
-- `NETCDF_FORMAT NETCDF4_CLASSIC|NETCDF4`（默认 `NETCDF4_CLASSIC`）
-- `DEFLATE_LEVEL 0-9`（默认 `4`）
-- `CHUNK_TIME <int>`（默认 `1`；time 维 chunk）
+**当前实现已支持的最小键（runner 会生成）**
+- `OUT_DIR <path>`：NetCDF 输出目录（相对/绝对）
+  - 路径解析：在实现中，若为相对路径，则相对 `run_dir`（`.../runs/<case>/<profile>/`）
+- `SCHEMA <path>`（可选）：输出 schema 文件路径（当前作为占位/记录用途；实现不强依赖）
 
-**写出控制**
-- `WRITE_MESH 1|0`（默认 `1`：在 ele 文件写 UGRID mesh）
-- `WRITE_FACE_CENTER 1|0`（默认 `1`）
+**示例（由 `tools/shudnc.py render-shud-cfg` 生成的最小配置片段）**
+```text
+SCHEMA ../../configs/output/ugrid.yaml
+OUT_DIR output_netcdf
+```
+
+> 兼容性说明（与本文档旧版本差异）：
+> - `OUTPUT_NETCDF_DIR/OUTPUT_NETCDF_PREFIX/NETCDF_FORMAT/DEFLATE_LEVEL/CHUNK_TIME/WRITE_MESH/WRITE_FACE_CENTER` 等键目前 **未实现**；
+> - 如需这些能力，请另起 issue/Change（建议通过 OpenSpec 跟踪）。
 
 ---
 
@@ -91,7 +96,7 @@
 - `face_node_connectivity="mesh_face_nodes"`
 
 ### 4.4 面心坐标（可选但默认开启）
-若 `WRITE_FACE_CENTER=1`：
+当前实现默认写出面心坐标：
 - `mesh_face_x(mesh_face)`：double，单位 `m`（用 `Ele[i].x`）
 - `mesh_face_y(mesh_face)`：double，单位 `m`（用 `Ele[i].y`）
 
@@ -215,4 +220,3 @@
 2) 开启 NetCDF 输出（可与 legacy 同时开启）。
 3) 随机抽样 2 个变量（如 `eleygw`、`rivqdown`）：
    - legacy CSV 与 NetCDF 对齐同一 time、同一 element/river，数值一致（允许极小浮点误差）。
-
