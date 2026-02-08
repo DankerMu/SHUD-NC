@@ -1,9 +1,9 @@
 name: era5
 title: "ERA5 (subset) -> SHUD forcing"
 
-# NOTE: Placeholder/spec file. We will fill the exact variable names/units
-# once we lock down the ERA5 files we want to support (single-file-per-day,
-# single-file-per-month, pressure-level vs single-level, etc).
+# NOTE: This file is a spec/template for the SHUD NetCDF-forcing implementation.
+# It is based on the current local QHH ERA5 subset files:
+#   Data/Forcing/ERA5/qhh/<year>/ERA5_<yyyymmdd>.nc
 #
 # Goal: map ERA5 variables to SHUD forcing:
 # - Precip (mm/day), Temp (C), RH (0-1), Wind (m/s), RN (W/m2)
@@ -12,20 +12,48 @@ layout:
   # Current local example (QHH subset):
   #   Data/Forcing/ERA5/qhh/2017/ERA5_20170104.nc
   #   Data/Forcing/ERA5/qhh/2018/ERA5_20180105.nc
+  year_subdir: true
   file_pattern: "ERA5_{yyyymmdd}.nc"
 
 netcdf:
   dims:
     time: "time"
-    lat: "latitude"
+    lat: "latitude"     # note: decreasing in the current subset
     lon: "longitude"
+  var_names:
+    tp: "tp"    # total precipitation (accumulated), units: m
+    t2m: "t2m"  # 2m temperature, units: K
+    d2m: "d2m"  # 2m dewpoint, units: K
+    u10: "u10"  # 10m U wind, units: m s-1
+    v10: "v10"  # 10m V wind, units: m s-1
+    ssr: "ssr"  # surface net shortwave radiation (accumulated), units: J m-2
+    sp: "sp"    # surface pressure, units: Pa (optional for RH; included for completeness)
 
 conversion:
-  # To be confirmed from the NetCDF metadata:
-  # - precip often in m (accumulated) or kg m-2; needs daily accumulation.
-  # - temperature often in K -> C.
-  # - RH may be provided directly or derived from (q, p, T) or (dewpoint, T).
-  notes:
-    - "Confirm variable names in the ERA5 NetCDFs (tp, t2m, d2m/q, sp, u10/v10, ssrd/strd...)."
-    - "Define accumulation window for precipitation and radiation."
-
+  # In the current QHH subset, ERA5 provides accumulated fields:
+  # - tp  (m): total precipitation (accumulated)
+  # - ssr (J m-2): surface net shortwave radiation (accumulated)
+  #
+  # The SHUD NetCDF reader should convert accumulated time series A[k] into
+  # interval increments for [time[k], time[k+1]) via:
+  #   dA = A[k+1] - A[k]
+  #   inc = dA if dA >= 0 else A[k+1]   (handles resets when stitching forecast cycles)
+  #
+  precip:
+    # Convert interval increment (m/interval) to mm/day rate:
+    #   mm/day = inc_m * 1000 * (86400 / dt_sec)
+    to_mm_per_day: "tp_inc_m * 1000 * (86400 / dt_sec)"
+  temperature:
+    to_celsius: "t2m - 273.15"
+  rh:
+    # From dewpoint + temperature (C), ratio 0-1:
+    #   es = 6.112 * exp(17.67*T /(T + 243.5))
+    #   ea = 6.112 * exp(17.67*Td/(Td + 243.5))
+    #   rh = clamp(ea/es, 0, 1)
+    method: "dewpoint"
+  wind:
+    to_m_per_s: "sqrt(u10*u10 + v10*v10)"
+  rn:
+    # Convert interval increment (J m-2 / interval) to W/m2:
+    to_w_per_m2: "ssr_inc_jm2 / dt_sec"
+    radiation_kind: "SWNET"  # ERA5 ssr is net shortwave; should map to SHUD SWNET mode

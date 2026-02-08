@@ -11,6 +11,10 @@
 # Python
 **/__pycache__/
 
+# Python virtual environments
+.venv/
+venv/
+
 # Local large datasets (keep external; do not commit)
 Data/*
 !Data/README.md

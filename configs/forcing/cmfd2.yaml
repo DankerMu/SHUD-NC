@@ -41,9 +41,15 @@ netcdf:
 conversion:
   # Mirrors AutoSHUD/Rfunction/LDAS_UnitConvert.R:unitConvert.CMFD
   precip:
-    # CMFD Prec is treated as mm/hr in AutoSHUD.
-    to_mm_per_day: "Prec * 24"
-    min_mm_per_day: 0.0001
+    # IMPORTANT:
+    # - In the current local CMFD2 NetCDFs (V0200, B-01), `prec.units` is `kg m-2 s-1`
+    #   (a flux). The physically correct conversion is: mm/day = prec * 86400.
+    # - Older/other CMFD exports may use mm/hr; in that case: mm/day = prec * 24.
+    # SHUD NetCDF-forcing implementation should prefer auto-detecting from NetCDF
+    # metadata, and allow an explicit override in cfg.forcing.
+    to_mm_per_day_if_units_kg_m2_s: "Prec * 86400"
+    to_mm_per_day_if_units_mm_hr: "Prec * 24"
+    min_mm_per_day: 0.0001  # threshold for treating as rain (matches AutoSHUD behavior)
   temperature:
     to_celsius: "Temp - 273.15"
   rh:
@@ -56,4 +62,3 @@ conversion:
     to_m_per_s: "abs(Wind)"
   rn:
     to_w_per_m2: "SRad"
-

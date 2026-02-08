@@ -16,13 +16,22 @@ mesh:
   topology_variable: "mesh"
   node_coordinates: ["mesh_node_x", "mesh_node_y"]
   face_node_connectivity: "mesh_face_nodes"
+  start_index: 1
+
+files:
+  # Recommended layout (phase B): split by object type for clarity and tool support.
+  element: "{prefix}.ele.nc"
+  river: "{prefix}.riv.nc"
+  lake: "{prefix}.lake.nc"
 
 time:
-  units: "days since 1970-01-01 00:00:00"
+  # Recommended: align with SHUD internal time axis (minutes since ForcStartTime).
+  units: "minutes since <ForcStartTime YYYY-MM-DD> 00:00:00 UTC"
   calendar: "standard"
 
 output:
-  frequency: "daily" # hourly | daily | monthly (target)
+  # Frequency is controlled by SHUD dt_* settings; NetCDF should follow Print_Ctrl.
+  frequency: "dt_* driven"
   variables:
     # Example list (to be confirmed)
     - name: "streamflow"
@@ -31,4 +40,3 @@ output:
     - name: "soil_moisture"
       units: "m3 m-3"
       location: "cell"
-
