@@ -290,6 +290,8 @@ def _cmfd2_netcdf_at(
     station_lon_deg: float,
     station_lat_deg: float,
     t_min: float,
+    clamp: bool,
+    time_tol_min: float,
 ) -> Dict[str, float]:
     netCDF4 = _require_netCDF4()
 
@@ -350,10 +352,36 @@ def _cmfd2_netcdf_at(
         factor_min, base_dt = _parse_units_since(units)
         forc_base = _parse_yyyymmdd(forc_start_yyyymmdd)
 
-        tmins = [(base_dt + dt.timedelta(minutes=float(v) * factor_min) - forc_base).total_seconds() / 60.0 for v in time_vals]
-        i = bisect.bisect_right(tmins, float(t_min)) - 1
-        if i < 0:
-            i = 0
+        tmins = [
+            (base_dt + dt.timedelta(minutes=float(v) * factor_min) - forc_base).total_seconds() / 60.0 for v in time_vals
+        ]
+        if not tmins:
+            raise ValueError(f"empty time axis: {f_prec}:{time_var}")
+        if any(float(tmins[j]) < float(tmins[j - 1]) - 1e-9 for j in range(1, len(tmins))):
+            raise ValueError(f"non-monotonic time axis: {f_prec}:{time_var}")
+
+        tmin_f = float(t_min)
+        first = float(tmins[0])
+        last = float(tmins[-1])
+        tol = float(time_tol_min)
+
+        if tmin_f < first - tol:
+            if clamp:
+                i = 0
+            else:
+                raise ValueError(f"t_min out of range (< first): t_min={tmin_f} first={first} tol={tol} file={f_prec}")
+        elif tmin_f > last + tol:
+            if clamp:
+                i = len(tmins) - 1
+            else:
+                raise ValueError(f"t_min out of range (> last): t_min={tmin_f} last={last} tol={tol} file={f_prec}")
+        else:
+            # Step-function semantics: select the last record at/before t_min (within tolerance).
+            i = bisect.bisect_right(tmins, tmin_f + tol) - 1
+            if i < 0:
+                i = 0
+            if i >= len(tmins):
+                i = len(tmins) - 1
 
     # open per-var files for point reads
     with netCDF4.Dataset(f_temp, "r") as ds_temp, netCDF4.Dataset(f_shum, "r") as ds_shum, netCDF4.Dataset(
@@ -435,6 +463,17 @@ def main(argv: Sequence[str]) -> int:
     p.add_argument("--prj", required=True, help="Project name (e.g. qhh)")
     p.add_argument("--stations", default="0,1,2", help="0-based station indices, comma-separated (default: 0,1,2)")
     p.add_argument("--t-min", default="0,180", help="Sample times in minutes since ForcStartTime, comma-separated (default: 0,180)")
+    p.add_argument(
+        "--clamp",
+        action="store_true",
+        help="Allow clamping t_min outside NetCDF coverage (legacy behavior). Default: strict bounds.",
+    )
+    p.add_argument(
+        "--time-tol-min",
+        type=float,
+        default=1e-3,
+        help="Time tolerance (minutes) used for bounds checks and index selection (default: 1e-3).",
+    )
     p.add_argument("--out-json", default="", help="Write JSON report to this path (optional)")
     p.add_argument("--fail-max-abs", type=float, default=math.inf, help="Fail if any variable max_abs exceeds this")
 
@@ -479,6 +518,8 @@ def main(argv: Sequence[str]) -> int:
                 station_lon_deg=st.lon_deg,
                 station_lat_deg=st.lat_deg,
                 t_min=tmin,
+                clamp=bool(args.clamp),
+                time_tol_min=float(args.time_tol_min),
             )
             diff = {k: float(base_map[k]) - float(nc_map[k]) for k in base_map.keys()}
             samples.append(
@@ -533,4 +574,3 @@ def main(argv: Sequence[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-
