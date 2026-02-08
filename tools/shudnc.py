@@ -175,11 +175,38 @@ def _autoshud_config_from_yaml(
     profile_cfg = _get(cfg, f"profiles.{profile}")
     run_dir = _resolve_path(repo_root, _get(profile_cfg, "run_dir"))
 
-    auto_cfg = _get(profile_cfg, "autoshud")
-    forcing_cfg = _get(auto_cfg, "forcing")
-    forcing_code = _as_float(_get(forcing_cfg, "code"), key=f"profiles.{profile}.autoshud.forcing.code")
-    forcing_dir = _resolve_path(repo_root, _get(forcing_cfg, "dir_ldas"))
-    forcing_csv_dir = _resolve_path(repo_root, _get(forcing_cfg, "csv_dir"))
+    auto_cfg = _get(profile_cfg, "autoshud", required=False)
+    baseline_auto_cfg = _get(cfg, "profiles.baseline.autoshud", required=False)
+    if auto_cfg is None:
+        if baseline_auto_cfg is None:
+            raise ConfigError(
+                f"Missing profiles.{profile}.autoshud and no profiles.baseline.autoshud fallback is available."
+            )
+        auto_cfg = baseline_auto_cfg
+
+    forcing_cfg = _get(auto_cfg, "forcing", required=False) or {}
+    forcing_code_val = forcing_cfg.get("code")
+    if forcing_code_val is None and isinstance(baseline_auto_cfg, dict):
+        forcing_code_val = _get(baseline_auto_cfg, "forcing.code", required=False)
+    forcing_code = _as_float(forcing_code_val, key=f"profiles.{profile}.autoshud.forcing.code")
+
+    forcing_dir_val = forcing_cfg.get("dir_ldas")
+    # For NetCDF profile, prefer using the SHUD forcing `dir` if provided.
+    shud_cfg = _get(profile_cfg, "shud", required=False) or {}
+    forcing_mode = str(shud_cfg.get("forcing_mode", "csv")).strip().lower()
+    shud_forcing_cfg = _get(shud_cfg, "forcing", required=False) or {}
+    if forcing_mode == "netcdf" and isinstance(shud_forcing_cfg, dict) and isinstance(shud_forcing_cfg.get("dir"), str):
+        forcing_dir_val = shud_forcing_cfg.get("dir")
+    if forcing_dir_val is None and isinstance(baseline_auto_cfg, dict):
+        forcing_dir_val = _get(baseline_auto_cfg, "forcing.dir_ldas", required=False)
+    forcing_dir = _resolve_path(repo_root, str(forcing_dir_val))
+
+    forcing_csv_dir_val = forcing_cfg.get("csv_dir")
+    if forcing_csv_dir_val is None and _get(profile_cfg, "autoshud", required=False) is None:
+        forcing_csv_dir_val = str(run_dir / "forcing")
+    if forcing_csv_dir_val is None and isinstance(baseline_auto_cfg, dict):
+        forcing_csv_dir_val = _get(baseline_auto_cfg, "forcing.csv_dir", required=False)
+    forcing_csv_dir = _resolve_path(repo_root, str(forcing_csv_dir_val))
 
     soil_cfg = _get(cfg, "datasets.soil")
     soil_code = _as_float(_get(soil_cfg, "code"), key="datasets.soil.code")
@@ -273,6 +300,10 @@ def _run_shud(
 def _validate(cfg: Dict[str, Any], *, repo_root: Path, profile: str) -> None:
     # Minimal validation: resolve paths and check key inputs exist.
     auto = _autoshud_config_from_yaml(cfg, repo_root=repo_root, profile=profile)
+    profile_cfg = _get(cfg, f"profiles.{profile}")
+    shud_cfg = _get(profile_cfg, "shud", required=False) or {}
+    forcing_mode = str(shud_cfg.get("forcing_mode", "csv")).strip().lower()
+    output_mode = str(shud_cfg.get("output_mode", "legacy")).strip().lower()
 
     missing: List[Path] = []
     for p in [auto.wbd, auto.stm, auto.dem]:
@@ -292,15 +323,37 @@ def _validate(cfg: Dict[str, Any], *, repo_root: Path, profile: str) -> None:
         if not auto.landuse_file.exists():
             missing.append(auto.landuse_file)
 
-    # Forcing: check expected variable folders exist (for CMFD layout).
-    if auto.forcing_code == 0.5:
+    # AutoSHUD forcing inputs: keep strict checks for baseline CSV mode,
+    # but avoid assuming CMFD directory layout when SHUD forcing is NetCDF.
+    if not auto.forcing_dir_ldas.exists():
+        missing.append(auto.forcing_dir_ldas)
+    elif forcing_mode != "netcdf" and auto.forcing_code == 0.5:
         for var_dir in ["Prec", "Temp", "SHum", "SRad", "Wind", "Pres"]:
             p = auto.forcing_dir_ldas / var_dir
             if not p.exists():
                 missing.append(p)
-    else:
-        if not auto.forcing_dir_ldas.exists():
-            missing.append(auto.forcing_dir_ldas)
+
+    # NetCDF forcing config checks (profile.shud.forcing)
+    if forcing_mode == "netcdf":
+        forcing_cfg = _get(shud_cfg, "forcing")
+        data_root = _resolve_path(repo_root, _get(forcing_cfg, "dir"))
+        adapter_path = _resolve_path(repo_root, _get(forcing_cfg, "adapter"))
+        if not data_root.exists():
+            missing.append(data_root)
+        if not adapter_path.exists():
+            missing.append(adapter_path)
+        else:
+            adapter = _load_yaml(adapter_path)
+            layout = adapter.get("layout")
+            if not (isinstance(layout, dict) and isinstance(layout.get("file_pattern"), str)):
+                raise ConfigError(f"Invalid adapter YAML (missing layout.file_pattern): {adapter_path}")
+
+    # NetCDF output config checks (profile.shud.output)
+    if output_mode in ("netcdf", "both"):
+        output_cfg = _get(shud_cfg, "output")
+        schema_path = _resolve_path(repo_root, _get(output_cfg, "schema"))
+        if not schema_path.exists():
+            missing.append(schema_path)
 
     if missing:
         msg = "\n".join([f"- {p}" for p in missing])
@@ -597,6 +650,20 @@ def main(argv: List[str]) -> int:
             _run(["Rscript", script, str(gen_file)], cwd=autoshud_dir, dry_run=args.dry_run)
 
     if args.command == "run":
+        # For NetCDF profile, render SHUD cfg overlays after AutoSHUD Step3 has
+        # generated the base SHUD inputs under run_dir/input/<prj>/.
+        shud_cfg = _get(profile_cfg, "shud", required=False) or {}
+        forcing_mode = str(shud_cfg.get("forcing_mode", "csv")).strip().lower()
+        output_mode = str(shud_cfg.get("output_mode", "legacy")).strip().lower()
+        if forcing_mode == "netcdf" or output_mode in ("netcdf", "both"):
+            _render_shud_cfg_overlays(
+                cfg,
+                repo_root=repo_root,
+                profile=profile,
+                run_dir=run_dir,
+                dry_run=args.dry_run,
+            )
+
         shud_cfg = _get(profile_cfg, "shud", required=False) or {}
         if bool(shud_cfg.get("run", False)):
             _run_shud(shud_bin=shud_bin, prjname=str(prjname), run_dir=run_dir, dry_run=args.dry_run)
