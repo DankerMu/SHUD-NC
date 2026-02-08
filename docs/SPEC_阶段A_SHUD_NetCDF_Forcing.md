@@ -65,43 +65,58 @@ SHUD 内部固定 5 个 forcing（见 `SHUD/src/Model/Macros.hpp`）：
 #### `<prj>.cfg.forcing`（forcing 配置）
 文件名建议：`input/<prj>/<prj>.cfg.forcing`，内容为 KEY VALUE（大小写不敏感）：
 
-**通用键（所有产品都支持）**
+> 重要：`projects/<case>/shud.yaml` 中引用的 adapter YAML（如 `configs/forcing/*.yaml`）是 **runner-only** 模板；
+> `tools/shudnc.py render-shud-cfg` 会把它们渲染为 SHUD 运行时实际读取的 KEY VALUE `*.cfg`（单一真相），SHUD **不读 YAML**。
+
+**必需键（所有产品都支持）**
 - `PRODUCT CMFD2|ERA5`
 - `DATA_ROOT <path>`：原始 NetCDF 数据根目录（相对或绝对）
-- `METHOD NEAREST`：目前只实现最近邻
-- `TIME_VAR <name>`（可选，默认 `time`）
-- `LAT_VAR <name>`（可选，默认 `lat`/`latitude`，按产品默认）
-- `LON_VAR <name>`（可选，默认 `lon`/`longitude`，按产品默认）
-- `RADIATION_KIND SWDOWN|SWNET`（可选；若提供，则覆盖/校验 `.cfg.para` 的 `RADIATION_INPUT_MODE`）
+  - 路径解析：在实现中，若为相对路径，则相对 `run_dir`（`.../runs/<case>/<profile>/`）。
 
-**CMFD2 专用键（可选覆盖）**
-- `CMFD_SUBDIR_PREC Prec`（默认 `Prec`）
-- `CMFD_SUBDIR_TEMP Temp`（默认 `Temp`）
-- `CMFD_SUBDIR_SHUM SHum`（默认 `SHum`）
-- `CMFD_SUBDIR_SRAD SRad`（默认 `SRad`）
-- `CMFD_SUBDIR_WIND Wind`（默认 `Wind`）
-- `CMFD_SUBDIR_PRES Pres`（默认 `Pres`）
-- `CMFD_FILE_PATTERN {var_lower}_CMFD_*_{yyyymm}.nc`（默认如左）
-- `CMFD_VAR_PREC prec`（默认 `prec`）
-- `CMFD_VAR_TEMP temp`（默认 `temp`）
-- `CMFD_VAR_SHUM shum`（默认 `shum`）
-- `CMFD_VAR_SRAD srad`（默认 `srad`）
-- `CMFD_VAR_WIND wind`（默认 `wind`）
-- `CMFD_VAR_PRES pres`（默认 `pres`）
+**布局（layout）键（通用；runner 会从 adapter 渲染）**
+- `LAYOUT_FILE_PATTERN <pattern>`：文件名模式（支持少量模板替换）
+  - CMFD2：需要 `{yyyymm}`；ERA5：需要 `{yyyymmdd}`
+  - 允许使用 `{var_lower}`（如 `prec/temp/...`）
+- `LAYOUT_YEAR_SUBDIR 1|0`（可选；ERA5 常用）
+  - `1`：先尝试 `DATA_ROOT/<yyyy>/...`，失败再回退 `DATA_ROOT/...`
+  - `0`：只使用 `DATA_ROOT/...`
+- `LAYOUT_VAR_DIR_<VAR> <dir>`（主要用于 CMFD2）
+  - `VAR` 取值：`PREC|TEMP|SHUM|SRAD|WIND|PRES`
+  - 例：`LAYOUT_VAR_DIR_PREC Prec`（表示数据位于 `DATA_ROOT/Prec/`）
+
+**NetCDF 维度/变量名键（通用；runner 会从 adapter 渲染）**
+- `NC_DIM_TIME <name>`（可选；默认 `time`）
+- `NC_DIM_LAT <name>`（可选；默认 `lat`）
+- `NC_DIM_LON <name>`（可选；默认 `lon`）
+- `TIME_VAR <name>`（可选；默认与 `NC_DIM_TIME` 相同）
+- `LAT_VAR <name>`（可选；默认与 `NC_DIM_LAT` 相同）
+- `LON_VAR <name>`（可选；默认与 `NC_DIM_LON` 相同）
+- `NC_VAR_<VAR> <name>`（变量名映射）
+  - CMFD2：`VAR` 取值 `PREC|TEMP|SHUM|SRAD|WIND|PRES`
+  - ERA5：`VAR` 取值 `TP|T2M|D2M|U10|V10|SSR|SP`
+
+**换算/语义键**
+- `RADIATION_KIND SWDOWN|SWNET`（可选；若提供，则覆盖/校验 `.cfg.para` 的 `RADIATION_INPUT_MODE`）
 - `CMFD_PRECIP_UNITS AUTO|KG_M2_S|MM_HR`（默认 `AUTO`：按 NetCDF `units` 自动判定；判定失败则报错要求显式指定）
 
-**ERA5 专用键（可选覆盖）**
-- `ERA5_FILE_PATTERN ERA5_{yyyymmdd}.nc`（默认如左）
-- `ERA5_YEAR_SUBDIR 1|0`（默认 `1`：先尝试 `DATA_ROOT/<yyyy>/...`，失败再回退 `DATA_ROOT/...`）
-- `ERA5_VAR_TP tp`（m，accum）
-- `ERA5_VAR_T2M t2m`（K）
-- `ERA5_VAR_D2M d2m`（K）
-- `ERA5_VAR_U10 u10`（m/s）
-- `ERA5_VAR_V10 v10`（m/s）
-- `ERA5_VAR_SSR ssr`（J/m2，accum）
-- `ERA5_VAR_SP sp`（Pa，可选；RH 计算不强依赖）
+> 兼容性说明：
+> - 实现当前支持 `CMFD_FILE_PATTERN` / `ERA5_FILE_PATTERN` 作为 `LAYOUT_FILE_PATTERN` 的别名；
+> - 不再支持 `CMFD_SUBDIR_*` / `CMFD_VAR_*` / `ERA5_VAR_*` 这类旧键（请使用 `LAYOUT_VAR_DIR_*` / `NC_VAR_*`）。
 
-> 设计原则：SHUD 实现只需要支持“少量模板替换 + 目录/变量名覆盖”，避免做过度通用的路径 DSL。
+**示例（由 `tools/shudnc.py render-shud-cfg` 生成的最小配置片段）**
+
+CMFD2：
+```text
+PRODUCT CMFD2
+DATA_ROOT ../../Data/Forcing/CMFD_2017_2018
+LAYOUT_FILE_PATTERN {var_lower}_CMFD_*_{yyyymm}.nc
+LAYOUT_VAR_DIR_PREC Prec
+NC_DIM_TIME time
+NC_DIM_LAT lat
+NC_DIM_LON lon
+NC_VAR_PREC prec
+CMFD_PRECIP_UNITS AUTO
+```
 
 ---
 
@@ -280,4 +295,3 @@ provider 必须做到：
 - `NumForc`、`ForcStartTime`
 - 前 5 个站点：`(lon,lat)->(grid_lon,grid_lat)`
 - time 覆盖范围（min/max）与步长（分钟）
-
