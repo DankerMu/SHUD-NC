@@ -2,9 +2,7 @@
 
 ## Purpose
 定义 SHUD 对 “气象 forcing” 的输入契约与时间推进语义，作为 baseline 回归与 NetCDF forcing 改造的共同基线。
-
 ## Requirements
-
 ### Requirement: Forcing station list file (`<prj>.tsd.forc`)
 SHUD SHALL read a forcing station list file `input/<prj>/<prj>.tsd.forc` to determine:
 - `NumForc` (number of forcing stations)
@@ -35,14 +33,12 @@ For each forcing station and each model time, SHUD SHALL obtain exactly 5 forcin
 - **THEN** SHUD SHOULD warn (range-check), helping detect unit mistakes
 
 ### Requirement: Time semantics (step function)
-Forcing in SHUD SHALL behave as a **step function** over forcing time intervals:
-- within a forcing interval `[t0, t1)`, `get()` returns a constant value
-- the forcing source SHALL expose `currentTimeMin()` and `nextTimeMin()` for the active interval
+Forcing in SHUD SHALL behave as a **step function** over forcing time intervals, independent of forcing source.
 
-#### Scenario: `movePointer(t)` advances in time order
-- **GIVEN** a forcing time series with monotonic non-decreasing time stamps
-- **WHEN** the model advances to `t` (minutes)
-- **THEN** the forcing pointer advances only when `t >= nextTimeMin()`
+#### Scenario: Provider swap does not change behavior
+- **GIVEN** the baseline CSV forcing source
+- **WHEN** forcing is accessed through a provider abstraction
+- **THEN** values and `currentTimeMin/nextTimeMin` semantics remain unchanged
 
 ### Requirement: Coverage must include the simulation period
 For each forcing station, the forcing time coverage SHALL fully cover the simulation interval `[START, END]` (in SHUD minutes).
@@ -59,4 +55,54 @@ When terrain solar radiation (TSR) is enabled, SHUD SHALL select a valid global 
 - **GIVEN** `SOLAR_LONLAT_MODE` selects a lon/lat
 - **WHEN** SHUD initializes forcing
 - **THEN** it SHALL validate lon ∈ [-180, 180] and lat ∈ [-90, 90] and fail fast otherwise
+
+### Requirement: Forcing mode switch (`FORCING_MODE`)
+SHUD SHALL support selecting forcing source via `<prj>.cfg.para`:
+- default: `FORCING_MODE=CSV`
+- allowed values: `CSV` or `NETCDF` (case-insensitive)
+
+#### Scenario: Default remains CSV
+- **GIVEN** `<prj>.cfg.para` does not define `FORCING_MODE`
+- **WHEN** SHUD loads the project
+- **THEN** forcing is read using the baseline CSV workflow
+
+### Requirement: NetCDF forcing requires `FORCING_CFG`
+When `FORCING_MODE=NETCDF`, SHUD SHALL require `FORCING_CFG <path>` to exist and be readable.
+
+#### Scenario: Missing forcing cfg fails fast
+- **GIVEN** `FORCING_MODE=NETCDF` and `FORCING_CFG` is missing
+- **WHEN** SHUD loads the project
+- **THEN** SHUD exits with a clear error mentioning `FORCING_CFG` and the input directory
+
+### Requirement: CMFD2 NetCDF forcing (NEAREST)
+When `FORCING_MODE=NETCDF` and product is `CMFD2`, SHUD SHALL read CMFD2 NetCDF forcing and provide the 5 forcing variables using NEAREST sampling.
+
+#### Scenario: Station maps to nearest grid point
+- **GIVEN** a station lon/lat from `<prj>.tsd.forc`
+- **WHEN** the provider initializes
+- **THEN** it selects the nearest `(grid_lon, grid_lat)` indices and logs the mapping for the first N stations
+
+### Requirement: Unit conversion matches SHUD contract
+The provider SHALL convert CMFD2 variables to SHUD forcing contract units (mm/day, °C, 0–1, m/s, W/m²).
+
+#### Scenario: Precip units auto-detected or explicitly configured
+- **GIVEN** precipitation units are detectable from NetCDF metadata
+- **WHEN** the provider converts precipitation
+- **THEN** it produces mm/day consistent with the detected units, otherwise fails fast requesting an explicit override
+
+### Requirement: NetCDF dimension order MUST be resolved by name
+The provider MUST resolve variable dimension order using NetCDF dimension names (`time`, `lat`, `lon`) and MUST NOT assume a fixed order (e.g. `(lon,lat,time)` vs `(time,lat,lon)`).
+
+#### Scenario: Dataset uses a different dimension order
+- **GIVEN** a CMFD2 NetCDF variable whose dimensions are not in `(time,lat,lon)` order
+- **WHEN** the provider reads a station time series via NEAREST sampling
+- **THEN** it maps indices by dimension name and returns correct values aligned to the `time` axis
+
+### Requirement: ERA5 accumulated variables are converted to interval values
+For ERA5 NetCDF forcing, accumulated variables (e.g., `tp`, `ssr`) SHALL be converted to interval increments for `[time[k], time[k+1])` and then expressed in SHUD contract units.
+
+#### Scenario: Reset handling
+- **GIVEN** an accumulated series that resets (A[k+1] < A[k])
+- **WHEN** computing interval increment
+- **THEN** the provider uses `inc = A[k+1]` for that interval
 
