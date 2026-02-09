@@ -4,3 +4,6 @@
 [submodule "AutoSHUD"]
 	path = AutoSHUD
 	url = https://github.com/DankerMu/AutoSHUD.git
+[submodule "rSHUD"]
+	path = rSHUD
+	url = https://github.com/DankerMu/rSHUD.git

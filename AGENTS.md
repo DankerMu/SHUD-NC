@@ -19,7 +19,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 # SHUD-NC (meta-repo)
 
-本仓库用于组织/管理 SHUD 相关工作流与文档；核心代码分别位于两个子模块中。
+本仓库用于组织/管理 SHUD 相关工作流与文档；核心代码分别位于三个子模块中。
 
 ## 目录结构约定（推荐）
 
@@ -27,6 +27,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - **核心开发目标都落在这里**：forcing 直接读 NetCDF、输出写标准 NetCDF
 - `AutoSHUD/`：AutoSHUD 流水线脚本（submodule）
   - 负责 **静态输入**（mesh/att/riv/soil/lc/para…）生成；forcing CSV 保留作为 baseline/兼容
+- `rSHUD/`：R 工具包（submodule）
+  - 提供 AutoSHUD 依赖的 R 侧空间/NetCDF 工具函数（R GIS 栈迁移/维护主要在这里）
 - `docs/`：设计/迁移文档（可入库）
 - `projects/`：项目/流域的**可版本化配置**（官方示例也在这里）
   - `projects/qhh/`：QHH 官方示例（baseline 对照 + 未来 NetCDF 改造目标配置）
@@ -50,13 +52,16 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **子模块 2**：`AutoSHUD/`
   - fork（推送用）：`origin = https://github.com/DankerMu/AutoSHUD.git`
   - 上游（仅用于同步，可选）：`upstream = https://github.com/SHUD-System/AutoSHUD.git`（默认分支 `master`）
+- **子模块 3**：`rSHUD/`
+  - fork（推送用）：`origin = https://github.com/DankerMu/rSHUD.git`
+  - 上游（仅用于同步，可选）：`upstream = https://github.com/SHUD-System/rSHUD.git`（默认分支 `master`）
 
 ## Submodule 模式的关键点
 
-- 父仓库不会保存 `SHUD/`、`AutoSHUD/` 的文件内容，只保存它们各自的 **commit SHA（gitlink）**。
+- 父仓库不会保存 `SHUD/`、`AutoSHUD/`、`rSHUD/` 的文件内容，只保存它们各自的 **commit SHA（gitlink）**。
 - 子模块执行 `git submodule update` 后，可能会处于 **detached HEAD**；开发前请切到分支（如 `master` 或新建 feature 分支）。
 - 你在子模块里完成提交并 `push` 后，如果希望父仓库也“跟上”该版本，需要在父仓库再提交一次子模块指针更新：
-  - `git add SHUD AutoSHUD && git commit -m "Update submodule refs" && git push`
+  - `git add SHUD AutoSHUD rSHUD && git commit -m "Update submodule refs" && git push`
 
 ## 常用操作（推荐流程）
 
@@ -72,7 +77,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ### 在子模块开发并推送到个人 fork
 
-以 `AutoSHUD/` 为例（`SHUD/` 同理）：
+以 `AutoSHUD/` 为例（`SHUD/`、`rSHUD/` 同理）：
 
 1. `cd AutoSHUD`
 2. `git switch -c feat/<topic>`（或 `git checkout -b feat/<topic>`）
@@ -85,15 +90,17 @@ Issue（在个人仓库）：
 
 - `gh issue create --repo DankerMu/AutoSHUD`
 - `gh issue create --repo DankerMu/SHUD-up`
+- `gh issue create --repo DankerMu/rSHUD`
 
 PR（从分支提到个人仓库 `master`）：
 
 - `gh pr create --repo DankerMu/AutoSHUD --base master --head feat/<topic>`
 - `gh pr create --repo DankerMu/SHUD-up --base master --head feat/<topic>`
+- `gh pr create --repo DankerMu/rSHUD --base master --head feat/<topic>`
 
 ### 同步上游更新到个人 fork
 
-以 `SHUD/` 为例：
+以 `SHUD/` 为例（`AutoSHUD/`、`rSHUD/` 同理）：
 
 1. `cd SHUD`
 2. `git fetch upstream`
@@ -105,5 +112,5 @@ PR（从分支提到个人仓库 `master`）：
 
 ## 注意事项
 
-- 父仓库中不要把子模块当“普通目录”去 `git add SHUD/ AutoSHUD/`（submodule 已由 `.gitmodules` 管理）。
+- 父仓库中不要把子模块当“普通目录”去 `git add SHUD/ AutoSHUD/ rSHUD/`（submodule 已由 `.gitmodules` 管理）。
 - 大数据与产物不要进 Git：`Data/`、`runs/`、以及 `qhh/` 默认被 `.gitignore` 忽略。
