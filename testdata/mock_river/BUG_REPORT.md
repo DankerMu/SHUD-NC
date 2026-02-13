@@ -696,3 +696,58 @@ Q_bug / Q_true = sqrt(S_bug / S_true) = sqrt(4e-4 / 0.01) = sqrt(0.04) = 0.2
 **@point 错误不影响计算结果**，因为 SHUD 求解器不读取该数据块。
 
 **建议**：修复 bug 后，对比修复前后的 QHH baseline 出口流量时序，量化 Slope 错误对水文模拟结果的实际影响。
+
+---
+
+## B. 出口河段边界条件标记被意外覆盖（`Down = -4` → `-3`）
+
+> 发现日期: 2026-02-13
+> 严重程度: **中等**（改变出口流量计算公式）
+> 状态: 待修复
+
+### B.1 问题概述
+
+Slope bug 修复时重新运行了 `shud.river()`，`sp.RiverDown()` 的默认出口标记为 `-3`，将 2022 年原始数据中有意设置的 `-4`（临界水深边界条件）覆盖为 `-3`（零水深梯度边界条件）。这是修复过程的**无意副作用**，不是 rSHUD 代码 bug。
+
+### B.2 证据链
+
+| 文件 | Down 值 | 来源 |
+|------|---------|------|
+| `runs/qhh/legacy/Calibration/input/qhh/qhh.sp.riv`（2022-06-08 原始） | `-4` | AutoSHUD Step3 产出后手动设置 |
+| `runs/qhh/baseline/input/qhh/qhh.sp.riv.bak.buggy`（buggy 备份） | `-4` | 与 legacy 文件 MD5 一致（`78f5afb3`） |
+| `/scratch/frd_muziyao/rSHUD/qhh/qhh.sp.riv`（旧版 rSHUD 目录） | `-3` | rSHUD 重新生成，默认值 |
+| `runs/qhh/baseline/input/qhh/qhh.sp.riv`（当前 baseline） | `-3` | Slope bug 修复时重跑 `shud.river()` |
+
+- rSHUD 全部 46 个历史版本中 `sp.RiverDown()` 的默认值均为 `rep(-3, nsp)`，从未出现 `-4`
+- AutoSHUD `Step3_BuidModel.R` 和 `terra_compat.R` 中也无 `-4` 赋值逻辑
+- 结论：2022 年原始文件中的 `-4` 是生成后**手动修改**的物理边界条件选择
+
+### B.3 SHUD solver 中 `-3` 与 `-4` 的语义差异
+
+代码位置：`SHUD/src/ModelData/MD_RiverFlux.cpp:36-58`
+
+```
+case -3:  /* 零水深梯度边界 */
+    s = BedSlope + 2·y/L
+    Q = Manning(A, n, R, s)
+
+case -4:  /* 临界水深边界 */
+    Q = A · √(g·y) · 60
+```
+
+此外 `MD_Lake.cpp:48` 中 `down <= -4` 会触发入湖路由（`toLake = (-3 - down) - 1`），但 QHH 案例中 `-4` 对应 `toLake = 0`，需确认是否有湖泊模块参与。
+
+### B.4 影响范围
+
+- 受影响河段：45 个出口河段（全部出口）
+- 影响方式：出口流量计算公式从临界水深变为零水深梯度
+  - `-4` 临界水深：`Q = A√(gy)·60`，与坡度无关，受水深控制
+  - `-3` 零水深梯度：`Q = Manning(S_bed + 2y/L)`，受坡度和水深共同控制
+- 潜在风险：若 QHH 案例启用了湖泊模块，`-4` 还会触发入湖路由逻辑，改为 `-3` 后湖泊路由断开
+
+### B.5 建议
+
+1. **确认原始意图**：核实 2022 年将出口标记设为 `-4` 的物理依据（临界水深 vs 入湖路由）
+2. **恢复 `-4` 标记**：若确认是有意选择，在当前 baseline 的 `qhh.sp.riv` 中将 45 个出口河段的 Down 恢复为 `-4`
+3. **工具链防护**：在 `shud.river()` 或 AutoSHUD Step3 中增加参数，允许指定出口边界条件类型，避免重新生成时丢失手动设置
+4. **回归对比**：分别用 `-3` 和 `-4` 运行 QHH baseline，对比出口流量时序差异
