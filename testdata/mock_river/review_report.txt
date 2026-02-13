@@ -1,0 +1,31 @@
+Review of testdata/mock_river/mismatch_report.json
+Generated: 2026-02-10
+
+1) All 3 cases passed (no error fields)
+PASS - No case contains an "error" field; fixed_endpoints_ok=true for all 3 cases.
+
+2) Mock1: N_orig=19, M_simp=16, mismatch_row_rate≈0.667
+PASS - Observed N_orig=19, M_simp=16, mismatch_row_rate=0.66666666667.
+
+3) Mock2: N_orig=62, M_simp=36, mismatch_row_rate≈0.857
+PASS - Observed N_orig=62, M_simp=36, mismatch_row_rate=0.85714285714.
+
+4) Mock3: N_orig=1827, M_simp=50, mismatch_row_rate≈0.944, median elev diff ~472m
+PASS - Observed N_orig=1827, M_simp=50, mismatch_row_rate=0.94444444444, elev_diff_wrong_right.median=472.5 m.
+
+5) All fixed_max_abs_diff = 0
+PASS - fixed_max_abs_diff is 0 for mock1, mock2, and mock3.
+
+6) All fixed elevation diffs = 0
+PASS - For all cases, elev_diff_fixed_right stats are all zeros (min/p05/median/mean/p95/max/sd = 0).
+
+7) Mismatch rates increase with N/M ratio (physically expected)
+PASS - N/M ratios increase monotonically (19/16=1.1875 < 62/36=1.7222 < 1827/50=36.54), and mismatch_row_rate increases accordingly (0.6667 < 0.8571 < 0.9444).
+
+8) Mock3 elevation diffs physically plausible for mountainous QHH terrain
+PASS - Wrong-vs-right endpoint elevation differences are positive and large (median 472.5 m, p05 249.9 m, p95 637.15 m, max 638 m), which is plausible for steep mountainous terrain.
+
+9) Conclusive proof: bug exists and fix works
+PASS - Pre-fix behavior shows high mismatch rates and large wrong-vs-right elevation discrepancies; post-fix checks show exact endpoint agreement (fixed_max_abs_diff=0 and all fixed elevation differences=0), demonstrating both bug existence and effective fix.
+
+Overall verdict: PASS (9/9 checklist items passed).

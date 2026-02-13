@@ -1,0 +1,12 @@
+1) Reads stm.shp and dem.tif from runs/qhh/baseline/DataPre/pcs/: PASS
+2) Subset selection (seed longest, connectivity expand, bbox fallback): PASS
+3) CRS handling EPSG:32647 UTM 47N: PASS
+4) DEM cropped with 500m buffer: PASS
+5) DEM loaded into memory (readAll) for self-contained .rds: PASS
+6) n_segments in [15,20], no rgeos/rgdal dependency: PASS
+
+n_segments=18
+dem_inMemory=TRUE
+sl_proj4=+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs
+dem_extent=xmin 413907.991641 xmax 463795.995540 ymin 4164582.189220 ymax 4206622.014451
+expanded_sl_bbox_500m=xmin 413909.635604 xmax 463788.508148 ymin 4164596.832571 ymax 4206598.689899
