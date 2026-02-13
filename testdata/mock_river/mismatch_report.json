@@ -1,0 +1,108 @@
+{
+  "run_info": {
+    "time": "2026-02-12 12:14:49 +0800",
+    "r_version": "R version 4.5.0 (2025-04-11)",
+    "sf_use_s2": true
+  },
+  "cases": {
+    "mock1_y_shape": {
+      "case": "mock1_y_shape",
+      "input": "mock1_y_shape.rds",
+      "n_segments": 3,
+      "N_orig": 19,
+      "M_simp": 16,
+      "mismatch_component_rate": 1.3333333333,
+      "mismatch_row_rate": 0.66666666667,
+      "elev_diff_wrong_right": {
+        "n": 3,
+        "n_na": 0,
+        "min": -44,
+        "p05": -39.6,
+        "median": 0,
+        "mean": -7.3333333333,
+        "p95": 19.8,
+        "max": 22,
+        "sd": 33.6055550963
+      },
+      "fixed_endpoints_ok": true,
+      "fixed_max_abs_diff": 0,
+      "elev_diff_fixed_right": {
+        "n": 3,
+        "n_na": 0,
+        "min": 0,
+        "p05": 0,
+        "median": 0,
+        "mean": 0,
+        "p95": 0,
+        "max": 0,
+        "sd": 0
+      }
+    },
+    "mock2_tree": {
+      "case": "mock2_tree",
+      "input": "mock2_tree.rds",
+      "n_segments": 7,
+      "N_orig": 62,
+      "M_simp": 36,
+      "mismatch_component_rate": 1.7142857143,
+      "mismatch_row_rate": 0.85714285714,
+      "elev_diff_wrong_right": {
+        "n": 7,
+        "n_na": 0,
+        "min": -44,
+        "p05": -40.7,
+        "median": 0,
+        "mean": 1.5714285714,
+        "p95": 52.8,
+        "max": 66,
+        "sd": 36.7190102574
+      },
+      "fixed_endpoints_ok": true,
+      "fixed_max_abs_diff": 0,
+      "elev_diff_fixed_right": {
+        "n": 7,
+        "n_na": 0,
+        "min": 0,
+        "p05": 0,
+        "median": 0,
+        "mean": 0,
+        "p95": 0,
+        "max": 0,
+        "sd": 0
+      }
+    },
+    "mock3_qhh_subset": {
+      "case": "mock3_qhh_subset",
+      "input": "mock3_qhh_subset.rds",
+      "n_segments": 18,
+      "N_orig": 1827,
+      "M_simp": 50,
+      "mismatch_component_rate": 1.8888888889,
+      "mismatch_row_rate": 0.94444444444,
+      "elev_diff_wrong_right": {
+        "n": 18,
+        "n_na": 0,
+        "min": 0,
+        "p05": 249.9,
+        "median": 472.5,
+        "mean": 456.5555555556,
+        "p95": 637.15,
+        "max": 638,
+        "sd": 148.0235363726
+      },
+      "fixed_endpoints_ok": true,
+      "fixed_max_abs_diff": 0,
+      "elev_diff_fixed_right": {
+        "n": 18,
+        "n_na": 0,
+        "min": 0,
+        "p05": 0,
+        "median": 0,
+        "mean": 0,
+        "p95": 0,
+        "max": 0,
+        "sd": 0
+      }
+    }
+  }
+}

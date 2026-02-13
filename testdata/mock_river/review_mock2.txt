@@ -1,0 +1,5 @@
+1. 7 segments, 2-level confluence tree topology: PASS
+2. Vertex counts (4×10 + 2×8 + 1×12 = 68): PASS
+3. DEM 20x20, extent (-10,160,-10,210), elevation = y: PASS
+4. set.seed(123) reproducibility: PASS
+5. Topology correct (Seg1..Seg7 confluences/endpoints): PASS

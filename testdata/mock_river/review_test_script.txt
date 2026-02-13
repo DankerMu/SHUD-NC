@@ -1,0 +1,50 @@
+Review target: testdata/mock_river/test_index_mismatch.R
+Date: 2026-02-10
+
+1) FAIL
+- Inlined `extractCoords` cannot be matched against `/Users/danker/Desktop/Hydro-SHUD/rSHUD/R/Func_GIS.R` because that file does not define `extractCoords`.
+- `extractCoords` is defined in `/Users/danker/Desktop/Hydro-SHUD/rSHUD/R/Func_Misc.R` (line ~41), and the inlined implementation matches that definition semantically.
+
+2) FAIL
+- Inlined `xy2ID` cannot be matched against `/Users/danker/Desktop/Hydro-SHUD/rSHUD/R/Func_GIS.R` because that file does not define `xy2ID`.
+- `xy2ID` is defined in `/Users/danker/Desktop/Hydro-SHUD/rSHUD/R/Func_Misc.R` (line ~63), and the inlined implementation matches that definition semantically.
+
+3) PASS
+- Inlined `FromToNode` matches `/Users/danker/Desktop/Hydro-SHUD/rSHUD/R/GIS_RiverProcess.R` lines 207-227 working copy, including `sf::st_simplify` behavior and `sf_use_s2` handling.
+
+4) PASS
+- Validation1 correctly compares original vs simplified coordinate table sizes:
+  - `xy_orig <- extractCoords(sl)`
+  - `xy_simp <- extractCoords(simplify_sp_lines(sl))`
+  - asserts `N_orig != M_simp`.
+
+5) PASS
+- Validation2 correctly reproduces the mismatch bug scenario by:
+  - using `FromToNode(sl, simplify = TRUE)` indices,
+  - confirming indices are in simplified-coordinate range,
+  - applying those indices to both `xy_orig` and `xy_simp`,
+  - asserting non-zero mismatch rate.
+
+6) PASS
+- Validation3 correctly verifies the fix by using `FromToNode(sl, coord = xy_orig, simplify = FALSE)` and checking extracted From endpoints against geometry-derived truth (`segment_first_vertices`) with strict tolerance.
+
+7) PASS
+- `segment_first_vertices()` is an appropriate ground truth for From endpoints in this mock dataset:
+  - extracts first vertex from each segment in `sp::coordinates` order,
+  - guards against multi-part segments (fails fast if encountered).
+
+8) PASS
+- No `rgeos` / `rgdal` dependency is present in the test script.
+
+9) PASS
+- JSON report is well-structured:
+  - top-level `run_info` + `cases`,
+  - each case contains core metrics and stats,
+  - error-case shape is explicit (`case`, `input`, `error`).
+
+10) PASS
+- Error handling is correctly implemented with `tryCatch` per case, sets `had_error`, records error payload, and exits with non-zero status when any case fails.
+
+Runtime verification:
+- Executed `Rscript testdata/mock_river/test_index_mismatch.R` successfully (exit code 0).
+- All three bundled mock cases completed and `mismatch_report.json` was generated.

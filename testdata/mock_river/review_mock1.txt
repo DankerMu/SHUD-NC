@@ -1,0 +1,6 @@
+Review: testdata/mock_river/mock1_y_shape.rds
+1. [PASS] 3 segments + 7 vertices each + Y-topology endpoints (Seg1->(50,50), Seg2->(50,50), Seg3->(50,0)); observed segments=3, vertices=7,7,7
+2. [PASS] DEM is 10x10, extent (-5,105,-5,105), elevation=y; observed dim=10x10 extent=(-5,105,-5,105) value_equals_y=TRUE
+3. [PASS] set.seed(42) reproducibility; seed_declared=TRUE geometry_matches_seed42=TRUE
+4. [PASS] sf->sp conversion correct; class=SpatialLines:TRUE roundtrip_geometry_equal=TRUE
+5. [PASS] st_simplify reduces vertex count; before=21 after(dTolerance=2)=9
