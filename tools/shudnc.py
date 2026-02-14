@@ -476,6 +476,24 @@ def _render_shud_forcing_cfg(
     kv.append(("DATA_ROOT", _relpath(run_dir, data_root)))
     kv.extend(_flatten_adapter_cfg(adapter))
 
+    # Optional KEY VALUE overrides appended after adapter defaults.
+    # This is useful for product-specific toggles like CMFD_PRECIP_UNITS.
+    forcing_kv = forcing_cfg.get("kv") if isinstance(forcing_cfg, dict) else None
+    if forcing_kv is not None:
+        if not isinstance(forcing_kv, dict):
+            raise ConfigError(f"Expected mapping for profiles.{profile}.shud.forcing.kv, got: {forcing_kv!r}")
+        for k, v in forcing_kv.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ConfigError(f"Invalid forcing.kv key for profile {profile}: {k!r}")
+            if v is None:
+                raise ConfigError(f"Invalid forcing.kv value for key {k!r} (must not be null)")
+            sv = str(v).strip()
+            if not sv:
+                raise ConfigError(f"Invalid forcing.kv value for key {k!r} (empty string)")
+            if any(ch.isspace() for ch in sv):
+                raise ConfigError(f"Invalid forcing.kv value for key {k!r}: contains whitespace: {sv!r}")
+            kv.append((k.strip().upper(), sv))
+
     prjname = str(_get(cfg, "project.name"))
     out_path = run_dir / "input" / prjname / f"{prjname}.cfg.forcing"
     header = [

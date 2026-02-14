@@ -81,11 +81,15 @@ profiles:
         product: cmfd2
         dir: Data/Forcing/CMFD_2017_2018
         adapter: configs/forcing/cmfd2.yaml
+        kv:
+          # Compatibility override: match the existing baseline forcing CSV
+          # (which was generated assuming precip is mm/hr and converting via *24).
+          CMFD_PRECIP_UNITS: MM_HR
         # Switch to ERA5 (QHH subset example):
         # product: era5
         # dir: Data/Forcing/ERA5/qhh
         # adapter: configs/forcing/era5.yaml
-      output_mode: netcdf
+      output_mode: legacy
       output:
         schema: configs/output/ugrid.yaml
         dir: runs/qhh/nc/output_netcdf

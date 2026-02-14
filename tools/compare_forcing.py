@@ -242,6 +242,20 @@ def _cmfd2_precip_units_kind(units: str) -> str:
     return "UNKNOWN"
 
 
+def _cmfd2_precip_units_kind_from_cfg(forcing_cfg: Dict[str, str], *, units_attr: str) -> str:
+    # Mirror NetcdfForcingProvider's CMFD_PRECIP_UNITS override behavior.
+    raw = forcing_cfg.get("CMFD_PRECIP_UNITS", "").strip().upper()
+    if not raw or raw == "AUTO":
+        return _cmfd2_precip_units_kind(units_attr)
+    if raw == "KG_M2_S":
+        return "KG_M2_S"
+    if raw in ("MM_HR", "MM/HR", "MM_H-1"):
+        return "MM_HR"
+    if raw in ("MM_DAY", "MM/DAY", "MM_D-1"):
+        return "MM_DAY"
+    raise ValueError(f"Invalid CMFD_PRECIP_UNITS override: {raw!r}")
+
+
 def _read_netcdf_point(
     ds: Any,
     *,
@@ -410,7 +424,7 @@ def _cmfd2_netcdf_at(
 
         # precip units auto-detect
         units = getattr(ds_prec.variables[v_prec], "units", "")
-        kind = _cmfd2_precip_units_kind(units if isinstance(units, str) else "")
+        kind = _cmfd2_precip_units_kind_from_cfg(forcing_cfg, units_attr=(units if isinstance(units, str) else ""))
         if kind == "KG_M2_S":
             prcp_mm_day = prec_raw * 86400.0
         elif kind == "MM_HR":
@@ -420,18 +434,35 @@ def _cmfd2_netcdf_at(
         else:
             raise ValueError(f"unknown CMFD2 precip units: {units!r}")
 
-        # match AutoSHUD min threshold behavior
-        if prcp_mm_day < 0.0001:
+        # Match NetcdfForcingProvider / AutoSHUD baseline forcing semantics:
+        # quantize first, then threshold.
+        if not math.isfinite(float(prcp_mm_day)) or prcp_mm_day < 0.0:
             prcp_mm_day = 0.0
-        if prcp_mm_day < 0.0:
+        prcp_mm_day = round(float(prcp_mm_day), 4)
+        if prcp_mm_day < 0.0001:
             prcp_mm_day = 0.0
 
         temp_c = temp_k - 273.15
+        if not math.isfinite(float(temp_c)):
+            temp_c = 0.0
+        temp_c = round(float(temp_c), 2)
         rh_percent = 0.263 * pres * shum / math.exp(17.67 * (temp_k - 273.15) / (temp_k - 29.65))
         rh_percent = max(0.0, min(100.0, float(rh_percent)))
         rh_1 = rh_percent / 100.0
+        rh_1 = round(float(rh_1), 4)
+        rh_1 = max(0.0, min(1.0, float(rh_1)))
+
         wind_ms = abs(wind)
+        wind_ms = 0.0 if not math.isfinite(float(wind_ms)) else float(wind_ms)
+        wind_ms = round(float(wind_ms), 2)
+        if wind_ms < 0.05:
+            wind_ms = 0.05
+
         rn_wm2 = srad
+        rn_wm2 = 0.0 if not math.isfinite(float(rn_wm2)) else float(rn_wm2)
+        if rn_wm2 < 0.0:
+            rn_wm2 = 0.0
+        rn_wm2 = float(round(float(rn_wm2), 0))
 
         return {
             "Precip_mm_day": float(prcp_mm_day),
