@@ -2,14 +2,14 @@
 
 > 最后验证：2026-02-14（QHH 10-day run）  
 > 覆盖仓库：`DankerMu/SHUD-NC`（父仓库）、`DankerMu/SHUD-up`（SHUD 子模块）、`DankerMu/AutoSHUD`（AutoSHUD 子模块）、`DankerMu/rSHUD`（rSHUD 子模块）  
-> 核心结论：在 QHH 10-day 验证窗口内，NetCDF forcing（CMFD2）与 baseline CSV forcing **5 个变量逐点一致**（`max_abs=0`），legacy `*.dat` 输出 **二进制一致**（`md5sum` 全部相同），baseline 默认路径未被破坏。
+> 核心结论：在 QHH 10-day 验证窗口内，NetCDF forcing（CMFD2/ERA5/GLDAS）与对应 baseline CSV forcing 的 **5 个变量逐点一致**（`max_abs=0`），legacy `*.dat` 输出 **bitwise 一致**（SHA256 一致），baseline 默认路径未被破坏。
 
 ## 1. 背景与目标
 
 ### 1.1 Phase A 在 A/B 迁移中的定位
 
 - 总体目标分两阶段推进：
-  - **Phase A（Forcing）**：SHUD 运行时直接读取原始 forcing NetCDF（先 CMFD2/ERA5），不再依赖海量站点 CSV。见 `openspec/project.md:6`、`docs/SHUD-NC_NetCDF_改造总体方案.md:10`。
+  - **Phase A（Forcing）**：SHUD 运行时直接读取原始 forcing NetCDF（先 CMFD2/ERA5/GLDAS），不再依赖海量站点 CSV。见 `openspec/project.md:6`、`docs/SHUD-NC_NetCDF_改造总体方案.md:10`。
   - **Phase B（Output）**：SHUD 输出标准 NetCDF（CF/UGRID）。见 `openspec/project.md:7`、`docs/SHUD-NC_NetCDF_改造总体方案.md:11`。
   - **Baseline preservation**：默认仍保持 AutoSHUD→SHUD（CSV forcing + legacy output）可跑、可回归。见 `openspec/project.md:8`、`docs/SHUD-NC_NetCDF_改造总体方案.md:12`、`CLAUDE.md:11`。
 
@@ -30,14 +30,14 @@
   - step function：先 `movePointer(t_min)`，后 `get(station, var)` 返回当前 forcing 区间常值。见 `SHUD/src/classes/ForcingProvider.hpp:20`–`SHUD/src/classes/ForcingProvider.hpp:28`、`openspec/specs/shud-forcing/spec.md:35`。
 - 两个实现：
   - `CsvForcingProvider`：复用现有 `_TimeSeriesData`（baseline 语义不变）。见 `SHUD/src/classes/ForcingProvider.hpp:36`–`SHUD/src/classes/ForcingProvider.hpp:63`。
-  - `NetcdfForcingProvider`：Phase A 新增，封装 CMFD2/ERA5 NetCDF 读取与换算，且仅在 `_NETCDF_ON` 时编译。见 `SHUD/src/classes/NetcdfForcingProvider.hpp:14`–`SHUD/src/classes/NetcdfForcingProvider.hpp:52`。
+  - `NetcdfForcingProvider`：Phase A 新增，封装 CMFD2/ERA5/GLDAS NetCDF 读取与换算，且仅在 `_NETCDF_ON` 时编译。见 `SHUD/src/classes/NetcdfForcingProvider.hpp:14`–`SHUD/src/classes/NetcdfForcingProvider.hpp:52`。
 
 ### 2.2 配置层叠：YAML → cfg → C++
 
 整体链路（单入口、单一真相）：
 
 1. 用户入口：`projects/<case>/shud.yaml`（父仓库）  
-   - QHH 示例的 baseline/nc profiles：`projects/qhh/shud.yaml:58`–`projects/qhh/shud.yaml:95`。
+   - QHH 示例的 profiles：`projects/qhh/shud.yaml:58`–`projects/qhh/shud.yaml:133`。
 2. 编排层渲染：`tools/shudnc.py render-shud-cfg` 把 adapter YAML 渲染为 SHUD 运行时读取的 KEY VALUE `.cfg`  
    - 生成 `*.cfg.forcing`：`tools/shudnc.py:455`–`tools/shudnc.py:506`。  
    - Patch `*.cfg.para`（幂等、去重）：`tools/shudnc.py:563`–`tools/shudnc.py:593`、`tools/shudnc.py:596`–`tools/shudnc.py:635`。  
@@ -67,8 +67,11 @@
   - `tools/shudnc.py:455`：渲染 `*.cfg.forcing`（从 adapter YAML flatten 为 KEY VALUE）。
   - `tools/shudnc.py:479`：新增 `forcing.kv`（追加任意 KEY VALUE override，例如 `CMFD_PRECIP_UNITS`）。
   - `tools/compare_forcing.py:245`：forcing 回归对比（baseline CSV vs NetCDF），内置同款单位/量化逻辑用于验收。
-  - `projects/qhh/shud.yaml:58`：QHH baseline/nc profiles（Phase A 验证期将 nc profile 设为 legacy output）。
+  - `projects/qhh/shud.yaml:58`：QHH profiles：`baseline`/`era5_baseline`/`gldas_baseline`/`nc`（Phase A 验证期将 nc profile 设为 legacy output）。
   - `configs/forcing/cmfd2.yaml:11`：CMFD2 adapter 模板（layout/vars/conversion）。
+  - `configs/forcing/era5.yaml:1`：ERA5 adapter 模板（按日文件 + accumulated tp/ssr forward-diff）。
+  - `configs/forcing/gldas.yaml:1`：GLDAS adapter 模板（per-timestep 文件布局 + 3-hour）。
+  - `runs/qhh/multi_product_forcing_report.md:1`：ERA5/GLDAS/NLDAS 适配与回归验证报告（QHH 10-day）。
 - AutoSHUD / rSHUD（baseline forcing 作为对照）
   - `AutoSHUD/Rfunction/LDAS_UnitConvert.R:72`：baseline CMFD forcing 的单位换算（`Prec * 24`）与降水阈值（`1e-4`）。
   - `rSHUD/R/writeInput.R:35`：`write.tsd()` 写出 forcing CSV 的文件头与 time tag 语义。
@@ -119,12 +122,50 @@
 - `maxTimeMin()` 的语义：step function 下最后一个记录覆盖到 “最后时间戳 + 最后正 dt”，用于覆盖期校验。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1762`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1779`。
 - CSV forcing 的对应语义由 `_TimeSeriesData::getMaxTimeCovered()` 提供。见 `SHUD/src/classes/TimeSeriesData.cpp:161`–`SHUD/src/classes/TimeSeriesData.cpp:171`。
 
-### 3.3 ERA5 NetCDF forcing（实现已落地，待扩展验证）
+### 3.3 ERA5 NetCDF forcing（✅ 已完成并通过回归验证）
 
-- ERA5 子集按日文件（`{yyyymmdd}`），并处理 accumulated 变量（tp/ssr）：
-  - 区间增量：`inc = A[k+1]-A[k]`，若 reset（负增量）则用 `A[k+1]`。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1630`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1637`。
-  - tp(m) → Precip(mm/day)，ssr(J m-2) → RN(W/m²)：`SHUD/src/classes/NetcdfForcingProvider.cpp:1643`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1645`。
-- 相关 adapter 模板：`configs/forcing/era5.yaml:11`–`configs/forcing/era5.yaml:59`。
+- 数据与布局：
+  - `Data/Forcing/ERA5` → `/volume/data/ForcingData/ERA5/land`（global 0.1°, hourly, daily files）。见 `runs/qhh/multi_product_forcing_report.md:17`。
+  - layout：`{year}/ERA5_{yyyymmdd}.nc`，adapter：`configs/forcing/era5.yaml:11`–`configs/forcing/era5.yaml:59`。
+- END 边界 lookahead（解决 accumulated forward-diff 的 “差分需要 t1” 问题）：
+  - `initEra5Days()` 计算 `end_min_needed = ceil(sim_end_min/dt)*dt`（dt=60min），确保包含第一个 `t >= sim_end_min` 的边界时间点用于 forward difference（sim_end 仍为 exclusive）。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1582`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1592`。
+- accumulated → 区间增量（tp/ssr）：
+  - forward-diff：`d = A1 - A0`；若出现 reset 则回退到 `A1`；并对小负增量做容忍（浮点量化误差/夜间辐射常值等）。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:2192`–`SHUD/src/classes/NetcdfForcingProvider.cpp:2214`。
+- baseline CSV 量化/阈值/风速下限规则（ERA5 分支同样适用）：
+  - Precip 4dp + `<1e-4` 置 0：`SHUD/src/classes/NetcdfForcingProvider.cpp:2226`–`SHUD/src/classes/NetcdfForcingProvider.cpp:2231`。
+  - RN 整数：`SHUD/src/classes/NetcdfForcingProvider.cpp:2239`–`SHUD/src/classes/NetcdfForcingProvider.cpp:2240`。
+  - Wind 2dp + `min=0.05`：`SHUD/src/classes/NetcdfForcingProvider.cpp:2269`–`SHUD/src/classes/NetcdfForcingProvider.cpp:2274`。
+- 变量映射（SHUD forcing contract 单位）：
+  - tp(m, accumulated) → Precip(mm/day)：`tp_inc_m * 1000 * (86400/dt_sec)`。见 `runs/qhh/multi_product_forcing_report.md:28`。
+  - t2m(K) → Temp(°C)：`-273.15`；d2m+t2m → RH（dewpoint method）。见 `runs/qhh/multi_product_forcing_report.md:29`–`runs/qhh/multi_product_forcing_report.md:31`。
+  - sqrt(u10²+v10²) → Wind；ssr(J/m², accumulated) → RN(W/m²)：`ssr_inc_jm2 / dt_sec`。见 `runs/qhh/multi_product_forcing_report.md:31`–`runs/qhh/multi_product_forcing_report.md:32`。
+- 辐射语义：ERA5 `ssr` 为 net shortwave → `RADIATION_KIND=SWNET` → SHUD `RADIATION_INPUT_MODE=SWNET`。见 `runs/qhh/nc_era5/qhh_10d_era5.log:34`。
+- 回归验证（QHH 10-day）：
+  - forcing：`runs/qhh/compare/era5_forcing.json`（`max_abs=0`）。见 `runs/qhh/multi_product_forcing_report.md:116`–`runs/qhh/multi_product_forcing_report.md:125`。
+  - 输出：baseline vs NetCDF 的 legacy `.dat` SHA256 一致。见 `runs/qhh/multi_product_forcing_report.md:130`–`runs/qhh/multi_product_forcing_report.md:137`。
+
+### 3.4 GLDAS NetCDF forcing（✅ 已完成并通过回归验证）
+
+- 数据与布局：
+  - `Data/Forcing/GLDAS` → `/volume/data/ForcingData/GESDISC/data/GLDAS/GLDAS_NOAH025_3H.2.1`（global 0.25°, 3-hour, 1 file/timestep）。见 `runs/qhh/multi_product_forcing_report.md:41`–`runs/qhh/multi_product_forcing_report.md:43`。
+  - layout：`{year}/{doy}/GLDAS_NOAH025_3H.A{yyyymmdd}.{hhmm}.021.nc4`。见 `configs/forcing/gldas.yaml:11`–`configs/forcing/gldas.yaml:31`。
+- 高效 timestep 枚举（不扫目录）：
+  - `initGldasTimesteps()` 由 `[sim_start_min, sim_end_min]` 直接构造 `{yyyymmdd}/{hhmm}/{doy}` 并检查文件存在。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1677`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1745`。
+- `_FillValue` 水体掩码处理（station remap）：
+  - 若最近邻格点为 `_FillValue/missing`，在首个 timestep 文件上做邻域搜索 remap 到最近有效格点，并在日志打印统计（QHH：38/386）。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1871`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1995`。
+- 变量映射（SHUD forcing contract 单位）：
+  - Rainf_f_tavg(kg/m²/s) → Precip(mm/day)：`*86400`。见 `runs/qhh/multi_product_forcing_report.md:45`–`runs/qhh/multi_product_forcing_report.md:54`。
+  - Tair_f_inst(K) → Temp(°C)；Qair_f_inst + Psurf_f_inst → RH（与 CMFD2 同公式）。见 `runs/qhh/multi_product_forcing_report.md:55`–`runs/qhh/multi_product_forcing_report.md:57`。
+  - Wind_f_inst → Wind；SWdown_f_tavg → RN（W/m²）。见 `runs/qhh/multi_product_forcing_report.md:57`–`runs/qhh/multi_product_forcing_report.md:58`。
+- 回归验证（QHH 10-day）：
+  - forcing：`runs/qhh/compare/gldas_forcing.json`（`max_abs=0`）。见 `runs/qhh/multi_product_forcing_report.md:121`–`runs/qhh/multi_product_forcing_report.md:125`。
+  - 输出：baseline vs NetCDF 的 legacy `.dat` SHA256 一致。见 `runs/qhh/multi_product_forcing_report.md:130`–`runs/qhh/multi_product_forcing_report.md:137`。
+
+### 3.5 NLDAS 评估（❌ Out-of-scope）
+
+- 格式为 GRIB（`.grb`），当前 NetCDF forcing 架构不支持直接读取。见 `runs/qhh/multi_product_forcing_report.md:67`–`runs/qhh/multi_product_forcing_report.md:72`。
+- 覆盖范围仅北美，不覆盖 QHH（中国）。见 `runs/qhh/multi_product_forcing_report.md:69`。
+- 未来方案：GRIB → NetCDF 预处理（`wgrib2` / `cdo` / `eccodes`），再复用现有 NetCDF forcing provider。见 `runs/qhh/multi_product_forcing_report.md:71`–`runs/qhh/multi_product_forcing_report.md:72`。
 
 ## 4. 工具链
 
@@ -133,6 +174,10 @@
 - `render-shud-cfg` 的核心能力：YAML（`projects/<case>/shud.yaml`）→ 运行期 `.cfg` overlay（KEY VALUE），避免 SHUD 解析 YAML。见 `openspec/specs/meta-runner/spec.md:30`、`tools/shudnc.py:596`。
 - `forcing.kv`：允许在 adapter flatten 后追加任意 KEY VALUE override（用于 `CMFD_PRECIP_UNITS` 等产品开关）。见 `tools/shudnc.py:479`–`tools/shudnc.py:496`。
 - `.cfg.para` patch：替换/去重/追加键，保证幂等。见 `tools/shudnc.py:563`–`tools/shudnc.py:593`。
+- QHH profiles（`projects/qhh/shud.yaml`）：
+  - `baseline`：CMFD forcing CSV（对照基线）。
+  - `era5_baseline` / `gldas_baseline`：分别生成 ERA5/GLDAS 的 forcing CSV baseline（用于对比对应 NetCDF runs）。
+  - `nc`：NetCDF forcing profile（支持通过切换 `product/dir/adapter` 选择 CMFD2/ERA5/GLDAS；Phase A 仍固定 `output_mode: legacy`）。
 
 ### 4.2 `tools/compare_forcing.py`：forcing 回归对比（CSV vs NetCDF）
 
@@ -147,25 +192,48 @@
   - 探测 `nc-config` / `pkg-config netcdf`，并启用 `-D_NETCDF_ON` + 链接 `libnetcdf`。见 `SHUD/Makefile:91`–`SHUD/Makefile:112`。
   - 若未找到 netcdf-c 则直接 `$(error ...)` fail-fast。见 `SHUD/Makefile:105`–`SHUD/Makefile:107`。
 
+### 4.4 数据路径迁移（`Data/Forcing/` 软链接）
+
+- 目标：避免把大体量 forcing 数据放进 Git；本地仅保留 `Data/Forcing/<product>` 的软链接，指向服务器全量数据。
+- 当前结构（见 `Data/Forcing/`）：
+  - `Data/Forcing/CMFD2` → `/volume/data/ForcingData/CMFD2.0/Data_forcing_03hr_010deg`
+  - `Data/Forcing/ERA5` → `/volume/data/ForcingData/ERA5/land`
+  - `Data/Forcing/GLDAS` → `/volume/data/ForcingData/GESDISC/data/GLDAS/GLDAS_NOAH025_3H.2.1`
+  - `Data/Forcing/NLDAS` → `/volume/data/ForcingData/GESDISC/data/NLDAS/NLDAS_FORA0125_H.002`
+- 实际迁移动作：移除本地 CMFD 2017–2018 子集数据，改为软链接到全量数据；ERA5/GLDAS/NLDAS 同理。
+
 ## 5. 验证结果（QHH 10-day run）
 
 ### 5.1 验证窗口与配置要点
 
 - 10-day 模拟区间由 `START=1, END=10`（day）定义（SHUD 内部以分钟推进）。示例见 nc profile 运行期 `qhh.cfg.para`：`runs/qhh/nc/input/qhh/qhh.cfg.para:15`–`runs/qhh/nc/input/qhh/qhh.cfg.para:16`。
-- Phase A 验证采用 **NetCDF forcing + legacy output**（先锁定 forcing 一致性；Phase B 再切 NetCDF output）。见 `projects/qhh/shud.yaml:74`–`projects/qhh/shud.yaml:95`（其中 `output_mode: legacy` 在 `projects/qhh/shud.yaml:92`）。
-- 为与 baseline CSV 对齐，本次在 nc profile 强制 `CMFD_PRECIP_UNITS=MM_HR`：`projects/qhh/shud.yaml:84`–`projects/qhh/shud.yaml:87`，渲染结果落在 `runs/qhh/nc/input/qhh/qhh.cfg.forcing:24`。
+- Phase A 验证采用 **NetCDF forcing + legacy output**（先锁定 forcing 一致性；Phase B 再切 NetCDF output）。见 `projects/qhh/shud.yaml:108`–`projects/qhh/shud.yaml:133`（其中 `output_mode: legacy` 在 `projects/qhh/shud.yaml:130`）。
+- 为与 baseline CSV 对齐，本次在 CMFD2 NetCDF run 强制 `CMFD_PRECIP_UNITS=MM_HR`：`projects/qhh/shud.yaml:118`–`projects/qhh/shud.yaml:121`，渲染结果落在 `runs/qhh/nc/input/qhh/qhh.cfg.forcing:24`。
+- 多产品验证采用独立 run_dir（避免互相覆盖）：
+  - CMFD2：CSV baseline=`runs/qhh/baseline`，NetCDF=`runs/qhh/nc`
+  - ERA5：CSV baseline=`runs/qhh/era5_baseline`，NetCDF=`runs/qhh/nc_era5`
+  - GLDAS：CSV baseline=`runs/qhh/gldas_baseline`，NetCDF=`runs/qhh/nc_gldas`
 
 ### 5.2 SHUD 运行侧证据：FORCING_MODE / station→grid / time coverage
 
-- SHUD 启动日志确认 `FORCING_MODE=NETCDF`，并自动推导 `RADIATION_INPUT_MODE`：`runs/qhh/nc/qhh_10d_nc_prec_units_fix.log:32`–`runs/qhh/nc/qhh_10d_nc_prec_units_fix.log:34`。
-- station→grid 最近邻映射与 NetCDF forcing 覆盖期打印：`runs/qhh/nc/qhh_10d_nc_prec_units_fix.log:155`–`runs/qhh/nc/qhh_10d_nc_prec_units_fix.log:159`。
+- CMFD2 NetCDF：`runs/qhh/nc/qhh_10d_nc_cmfd2_20260214.log:92`–`runs/qhh/nc/qhh_10d_nc_cmfd2_20260214.log:99`（FORCING/OUTPUT/RADIATION/TSR 配置回显）
+- ERA5 NetCDF：`runs/qhh/nc_era5/qhh_10d_era5.log:32`–`runs/qhh/nc_era5/qhh_10d_era5.log:35`（`RADIATION_INPUT_MODE: SWNET` derived）
+- GLDAS NetCDF：`runs/qhh/nc_gldas/qhh_10d_gldas_20260214.log:95`–`runs/qhh/nc_gldas/qhh_10d_gldas_20260214.log:100`（`GLDAS remap` + station→grid + time coverage）
 
-### 5.3 forcing 对比：5 变量 `max_abs=0`
+### 5.3 回归验证汇总（forcing + legacy 输出）
 
-- 对比产物：`runs/qhh/compare/forcing_10d_simwindow_v2.json`  
-  - 抽样 stations：`[0, 50, 100, 200, 385]`，抽样时刻：`t_min=1440..14400`（3-hour 步长）见 `runs/qhh/compare/forcing_10d_simwindow_v2.json:6`、`runs/qhh/compare/forcing_10d_simwindow_v2.json:13`。  
-  - 5 变量统计：全部 `max_abs=0.0`。见 `runs/qhh/compare/forcing_10d_simwindow_v2.json:88`–`runs/qhh/compare/forcing_10d_simwindow_v2.json:113`。
-- 使用的命令（验收门禁 `--fail-max-abs 0`）：
+| 产品 | NetCDF 运行 | CSV Baseline | Forcing max_abs_diff | 输出 `.dat` |
+|------|-----------|-------------|---------------------|------------|
+| CMFD2 | ✅ `runs/qhh/nc` | ✅ `runs/qhh/baseline` | 0（`runs/qhh/compare/cmfd2_forcing.json`） | SHA256 一致 |
+| ERA5  | ✅ `runs/qhh/nc_era5` | ✅ `runs/qhh/era5_baseline` | 0（`runs/qhh/compare/era5_forcing.json`） | SHA256 一致 |
+| GLDAS | ✅ `runs/qhh/nc_gldas` | ✅ `runs/qhh/gldas_baseline` | 0（`runs/qhh/compare/gldas_forcing.json`） | SHA256 一致 |
+
+注：
+- ERA5 的 `ssr` 为 net shortwave，因此 NetCDF run 使用 `RADIATION_KIND=SWNET`；若要让 CSV baseline 输出一致，需要在 CSV run 的 `qhh.cfg.para` 手动设置 `RADIATION_INPUT_MODE SWNET`（CSV 模式不会从 `FORCING_CFG` 推导）。见 `runs/qhh/multi_product_forcing_report.md:127`–`runs/qhh/multi_product_forcing_report.md:129`。
+
+### 5.4 forcing 对比：5 变量 `max_abs=0`（示例命令）
+
+- 以 CMFD2 为例（ERA5/GLDAS 同理；run_dir/out-json 按上表替换），验收门禁 `--fail-max-abs 0`：
   ```bash
   # t_min 覆盖 10-day 窗口：1440..14400（3-hour / 180min 步长）
   tmins=$(python3 - <<'PY'
@@ -178,17 +246,15 @@
     --prj qhh \
     --stations 0,50,100,200,385 \
     --t-min "$tmins" \
-    --out-json runs/qhh/compare/forcing_10d_simwindow_v2.json \
+    --out-json runs/qhh/compare/cmfd2_forcing.json \
     --fail-max-abs 0
   ```
 
-### 5.4 legacy 输出：`*.dat` 二进制一致（md5sum）
+### 5.5 legacy 输出：`*.dat` bitwise 一致（SHA256 / md5sum）
 
-- 对比目录：
-  - baseline：`runs/qhh/baseline/output/qhh.out/`
-  - nc：`runs/qhh/nc/output/qhh.out/`
-- 结论：两边共 21 个 `*.dat` 文件 `md5sum` 全部相同（`diff -u` 无输出）。
-- `md5sum`（baseline 与 nc 相同；取 baseline 列表作为证据）：
+- ERA5/GLDAS：legacy `.dat` 输出与各自 CSV baseline 的 SHA256 一致。见 `runs/qhh/multi_product_forcing_report.md:130`–`runs/qhh/multi_product_forcing_report.md:137`。
+- CMFD2：legacy `.dat` 输出与 CSV baseline 一致（下方 md5 证据；另已验证 SHA256 一致）。
+- 以 CMFD2 为例（沿用 md5 证据；SHA256 亦已验证一致）：
   ```text
   d41d8cd98f00b204e9800998ecf8427e  ./DY.dat
   6c97b77d19338e31dc082384c00bf186  ./qhh.eleveta.dat
@@ -212,14 +278,14 @@
   d178b1f1a93481bd58f96ffffc900199  ./qhh.rn_h.dat
   26fcf399b07114e859c2b60d8ee183f3  ./qhh.rn_t.dat
   ```
-- 用到的命令：
+- 用到的命令（CMFD2 baseline vs NetCDF；ERA5/GLDAS 替换 run_dir 即可）：
   ```bash
   (cd runs/qhh/baseline/output/qhh.out && find . -maxdepth 1 -name '*.dat' -print0 | sort -z | xargs -0 md5sum) > /tmp/baseline.md5
   (cd runs/qhh/nc/output/qhh.out && find . -maxdepth 1 -name '*.dat' -print0 | sort -z | xargs -0 md5sum) > /tmp/nc.md5
   diff -u /tmp/baseline.md5 /tmp/nc.md5
   ```
 
-### 5.5 baseline 未破坏（同 profile 复跑稳定）
+### 5.6 baseline 未破坏（同 profile 复跑稳定）
 
 - baseline legacy `*.dat` 与一次运行前自动备份目录一致：
   - `runs/qhh/baseline/output/qhh.out` vs `runs/qhh/baseline/output/qhh.out.bak_pre_baseline_rerun_20260214_005500`
@@ -232,11 +298,17 @@
 2. CSV 量化匹配（实现 forcing diff=0 的关键）  
    - 修复：NetCDF provider 按 baseline CSV 的量化/阈值语义处理 5 变量（precip/RH 4dp；temp/wind 2dp；RN int；先 quantize 再 threshold；wind min clamp）。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1266`、`tools/compare_forcing.py:437`。
 3. `CMFD_PRECIP_UNITS` 单位覆盖（兼容 baseline 与物理正确两种路径）  
-   - 修复：支持 `AUTO|KG_M2_S|MM_HR|MM_DAY`，auto-detect 失败 fail-fast；并允许在 cfg.forcing 显式指定。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1180`、`tools/shudnc.py:479`、`projects/qhh/shud.yaml:84`。
+   - 修复：支持 `AUTO|KG_M2_S|MM_HR|MM_DAY`，auto-detect 失败 fail-fast；并允许在 cfg.forcing 显式指定。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1180`、`tools/shudnc.py:479`、`projects/qhh/shud.yaml:121`。
 4. `maxTimeMin` 的 step function 语义  
    - 修复：forcing 覆盖期校验使用 “最后时间戳 + 最后正 dt” 而不是简单 `time.back()`。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1768`。
 5. `getMaxTimeCovered`（CSV forcing 覆盖期语义）  
    - 修复/明确：CSV forcing 覆盖期同样按 step function 扩展到 `maxTime + lastDtMin`。见 `SHUD/src/classes/TimeSeriesData.cpp:161`。
+6. ERA5 END 边界 lookahead（accumulated forward-diff 需要 t1）  
+   - 修复：`initEra5Days()` 将 `sim_end_min` 向上取整到小时边界（`end_min_needed`），并据此枚举 end_days。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1582`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1592`。
+7. ERA5 accumulated 的 reset + 小负增量容忍  
+   - 修复：`tp/ssr` forward-diff 时引入 tolerance，并对 reset 走 `inc=A1` 回退路径。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:2192`–`SHUD/src/classes/NetcdfForcingProvider.cpp:2214`。
+8. GLDAS per-timestep 文件枚举与 `_FillValue` remap  
+   - 实现：timestep list 直接构造文件路径（不扫目录）+ 对水体掩码 remap 到最近有效格点。见 `SHUD/src/classes/NetcdfForcingProvider.cpp:1677`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1745`、`SHUD/src/classes/NetcdfForcingProvider.cpp:1871`–`SHUD/src/classes/NetcdfForcingProvider.cpp:1995`。
 
 ## 7. 相关 Issues 和 PRs（4 仓库）
 
@@ -269,6 +341,7 @@
 
 | # | State | Title | Link |
 |---:|:---:|---|---|
+| 37 | MERGED | docs: Phase A (NetCDF Forcing) 完整工作总结 | https://github.com/DankerMu/SHUD-NC/pull/37 |
 | 36 | MERGED | feat: Phase A NetCDF forcing validation pass (10-day QHH) | https://github.com/DankerMu/SHUD-NC/pull/36 |
 | 35 | MERGED | chore: update rSHUD submodule ref (snap tol fix) | https://github.com/DankerMu/SHUD-NC/pull/35 |
 | 34 | MERGED | chore: update SHUD submodule ref (TSR default on) | https://github.com/DankerMu/SHUD-NC/pull/34 |
@@ -431,7 +504,7 @@
   - SHUD：`#74 [B6] NetCDF output: SCHEMA 字段解析与 schema 驱动输出控制`（OPEN）https://github.com/DankerMu/SHUD-up/issues/74  
   - Runner：`#32 [B7] runner: 渲染 CRS_WKT 到 cfg.ncoutput`（OPEN）https://github.com/DankerMu/SHUD-NC/issues/32
 - ERA5 forcing 的工具/验证补齐
-  - 工具：`#30 [A5] compare_forcing.py: 扩展支持 ERA5 对比`（OPEN）https://github.com/DankerMu/SHUD-NC/issues/30
+  - 现状：ERA5/GLDAS 的 forcing compare 与 `.dat` 回归已跑通（本总结已更新证据链）；`#30` 仍为 OPEN，建议收尾：补齐 GLDAS/NLDAS 文档指引后关闭。https://github.com/DankerMu/SHUD-NC/issues/30
 - nc profile 端到端 run（把 `profiles.nc.shud.run=true` 真正跑起来）
   - `#31 [NC] 启用 nc profile 端到端运行（shud.run: true）`（OPEN）https://github.com/DankerMu/SHUD-NC/issues/31
 - Forcing 校验/硬化
