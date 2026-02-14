@@ -106,3 +106,27 @@ For ERA5 NetCDF forcing, accumulated variables (e.g., `tp`, `ssr`) SHALL be conv
 - **WHEN** computing interval increment
 - **THEN** the provider uses `inc = A[k+1]` for that interval
 
+#### Scenario: Forward-difference requires lookahead
+- **GIVEN** simulation END is an exclusive bound and does not include forcing at `t == END`
+- **WHEN** computing accumulated-field increments via forward difference for the last simulated forcing interval
+- **THEN** the provider SHALL ensure forcing availability at the first forcing time boundary `>= END` (for reading A[k+1])
+
+### Requirement: GLDAS NetCDF forcing (NEAREST)
+When `FORCING_MODE=NETCDF` and product is `GLDAS`, SHUD SHALL read GLDAS (e.g., NOAH 0.25° 3-hourly) NetCDF forcing stored as **one file per time step**, and provide the 5 forcing variables using NEAREST sampling with SHUD contract units.
+
+Dataset-to-contract mapping:
+- Precip (mm/day): `Rainf_f_tavg` (kg/m²/s) → `val * 86400`
+- Temp (°C): `Tair_f_inst` (K) → `val - 273.15`
+- RH (0–1): derived from `Qair_f_inst` (kg/kg), `Psurf_f_inst` (Pa), `Tair_f_inst` (K) using the same SHum→RH formula as CMFD2
+- Wind (m/s): `Wind_f_inst`
+- RN (W/m²): `SWdown_f_tavg`
+
+#### Scenario: Per-timestep files are enumerated without directory scan
+- **GIVEN** forcing files are stored under `{year}/{doy}/...` and there is exactly one file per forcing timestep
+- **WHEN** the provider initializes for a simulation interval
+- **THEN** it enumerates the required files by constructing expected paths from the time range, without scanning directories
+
+#### Scenario: Missing water-mask grid cells are handled
+- **GIVEN** the nearest grid cell for a station is `_FillValue` (e.g., over lakes)
+- **WHEN** the provider initializes station-to-grid mapping
+- **THEN** it remaps to the nearest valid grid cell within a limited search radius, otherwise fails fast with a clear error

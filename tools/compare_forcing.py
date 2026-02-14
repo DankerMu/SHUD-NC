@@ -59,6 +59,37 @@ def _yyyymm_from_forc_start(forc_start_yyyymmdd: int, t_min: float) -> str:
     return f"{t.year:04d}{t.month:02d}"
 
 
+def _dt_from_forc_start(forc_start_yyyymmdd: int, t_min: float) -> dt.datetime:
+    base = _parse_yyyymmdd(forc_start_yyyymmdd)
+    return base + dt.timedelta(minutes=float(t_min))
+
+
+def _floor_dt_to_minute_step(t: dt.datetime, step_min: int) -> dt.datetime:
+    if step_min <= 0:
+        raise ValueError(f"invalid step_min: {step_min}")
+    base = dt.datetime(t.year, t.month, t.day, 0, 0, 0, tzinfo=dt.timezone.utc)
+    mins = int(round((t - base).total_seconds() / 60.0))
+    mins = (mins // int(step_min)) * int(step_min)
+    return base + dt.timedelta(minutes=int(mins))
+
+
+def _doy_3(dt_utc: dt.datetime) -> str:
+    return _zfill(int(dt_utc.timetuple().tm_yday), 3)
+
+
+def _format_gldas_path(file_pattern: str, *, t: dt.datetime) -> str:
+    yyyymmdd = t.strftime("%Y%m%d")
+    year = t.strftime("%Y")
+    doy = _doy_3(t)
+    hhmm = t.strftime("%H%M")
+    return (
+        file_pattern.replace("{year}", year)
+        .replace("{doy}", doy)
+        .replace("{yyyymmdd}", yyyymmdd)
+        .replace("{hhmm}", hhmm)
+    )
+
+
 def _read_kv_cfg(path: str) -> Dict[str, str]:
     kv: Dict[str, str] = {}
     with open(path, "r", encoding="utf-8") as f:
@@ -130,6 +161,8 @@ def _read_tsd_forc(path: str) -> TsdForc:
 
 
 def _resolve_station_csv_path(tsd_dir: str, rel_path: str, filename: str) -> str:
+    # SHUD resolves tsd.forc's "path" line relative to the model working directory
+    # (run_dir), not relative to the tsd.forc file's directory.
     if rel_path:
         return os.path.normpath(os.path.join(tsd_dir, rel_path, filename))
     return os.path.normpath(os.path.join(tsd_dir, filename))
@@ -473,6 +506,551 @@ def _cmfd2_netcdf_at(
         }
 
 
+def _era5_rh_from_dewpoint(*, temp_c: float, dew_c: float) -> float:
+    # Ratio 0-1, computed from dewpoint (Td) and temperature (T).
+    #
+    # es = 6.112 * exp(17.67*T /(T + 243.5))
+    # ea = 6.112 * exp(17.67*Td/(Td + 243.5))
+    # rh = clamp(ea/es, 0, 1)
+    def esat(tc: float) -> float:
+        return 6.112 * math.exp(17.67 * float(tc) / (float(tc) + 243.5))
+
+    es = esat(temp_c)
+    if not math.isfinite(float(es)) or es <= 0.0:
+        return 0.0
+    ea = esat(dew_c)
+    if not math.isfinite(float(ea)) or ea < 0.0:
+        ea = 0.0
+    rh = float(ea) / float(es)
+    if not math.isfinite(float(rh)):
+        rh = 0.0
+    rh = max(0.0, min(1.0, float(rh)))
+    return rh
+
+
+def _era5_netcdf_at(
+    *,
+    forcing_cfg: Dict[str, str],
+    forc_start_yyyymmdd: int,
+    station_lon_deg: float,
+    station_lat_deg: float,
+    t_min: float,
+    clamp: bool,
+    time_tol_min: float,
+) -> Dict[str, float]:
+    netCDF4 = _require_netCDF4()
+
+    product = forcing_cfg.get("PRODUCT", "").upper()
+    if product != "ERA5":
+        raise ValueError(f"Only PRODUCT=ERA5 is supported here (got {product!r})")
+
+    data_root = forcing_cfg["DATA_ROOT"]
+    file_pattern = forcing_cfg["LAYOUT_FILE_PATTERN"]
+    year_subdir = forcing_cfg.get("LAYOUT_YEAR_SUBDIR", "0").strip() not in ("", "0", "FALSE", "false")
+
+    dim_time = forcing_cfg.get("NC_DIM_TIME", "time")
+    dim_lat = forcing_cfg.get("NC_DIM_LAT", "latitude")
+    dim_lon = forcing_cfg.get("NC_DIM_LON", "longitude")
+
+    time_var = forcing_cfg.get("TIME_VAR", dim_time)
+    lat_var = forcing_cfg.get("LAT_VAR", dim_lat)
+    lon_var = forcing_cfg.get("LON_VAR", dim_lon)
+
+    v_tp = forcing_cfg["NC_VAR_TP"]
+    v_t2m = forcing_cfg["NC_VAR_T2M"]
+    v_d2m = forcing_cfg["NC_VAR_D2M"]
+    v_u10 = forcing_cfg["NC_VAR_U10"]
+    v_v10 = forcing_cfg["NC_VAR_V10"]
+    v_ssr = forcing_cfg["NC_VAR_SSR"]
+
+    # Step-function semantics for t_min: select the last hourly record at/before t_min (with tolerance),
+    # then compute accumulated-field increments using the forward-difference [i, i+1).
+    forc_base = _parse_yyyymmdd(forc_start_yyyymmdd)
+    target_dt = _dt_from_forc_start(forc_start_yyyymmdd, float(t_min))
+    t0 = _floor_dt_to_minute_step(target_dt, 60)
+    t1 = t0 + dt.timedelta(hours=1)
+
+    def resolve(day_dt: dt.datetime) -> str:
+        yyyymmdd = day_dt.strftime("%Y%m%d")
+        fn = file_pattern.replace("{yyyymmdd}", yyyymmdd)
+        if year_subdir:
+            return os.path.join(data_root, f"{day_dt.year:04d}", fn)
+        return os.path.join(data_root, fn)
+
+    f0 = resolve(t0)
+    f1 = resolve(t1)
+
+    # Open file(s)
+    with netCDF4.Dataset(f0, "r") as ds0:
+        lat_arr = ds0.variables[lat_var][:]
+        lon_arr = ds0.variables[lon_var][:]
+        lon_min = float(lon_arr.min())
+        lon_max = float(lon_arr.max())
+        lon_0360 = lon_min >= 0.0 and lon_max > 180.0
+
+        slon = float(station_lon_deg)
+        if lon_0360:
+            if slon < 0.0:
+                slon += 360.0
+            while slon >= 360.0:
+                slon -= 360.0
+
+        lat_idx = int(abs(lat_arr - float(station_lat_deg)).argmin())
+        lon_idx = int(abs(lon_arr - slon).argmin())
+
+        time_vals0 = ds0.variables[time_var][:]
+        units0 = getattr(ds0.variables[time_var], "units", None)
+        if not isinstance(units0, str) or not units0.strip():
+            raise ValueError(f"time variable missing units: {f0}:{time_var}")
+        factor_min0, base_dt0 = _parse_units_since(units0)
+
+        def to_dt(base_dt: dt.datetime, factor_min: float, v: float) -> dt.datetime:
+            return base_dt + dt.timedelta(minutes=float(v) * float(factor_min))
+
+        # Build absolute datetimes for time axis (small; 24 per file) and find t0/t1 indices.
+        t0_abs = t0
+        t1_abs = t1
+        tol = float(time_tol_min)
+        times0 = [to_dt(base_dt0, factor_min0, float(v)) for v in time_vals0]
+        if not times0:
+            raise ValueError(f"empty time axis: {f0}:{time_var}")
+        if any(times0[j] < times0[j - 1] for j in range(1, len(times0))):
+            raise ValueError(f"non-monotonic time axis: {f0}:{time_var}")
+
+        def idx_of(target: dt.datetime) -> int:
+            # step-function: last <= target (within tolerance)
+            tmins = [(tt - forc_base).total_seconds() / 60.0 for tt in times0]
+            tgt_min = (target - forc_base).total_seconds() / 60.0
+            first = float(tmins[0])
+            last = float(tmins[-1])
+            if tgt_min < first - tol:
+                if clamp:
+                    return 0
+                raise ValueError(
+                    f"t_min out of range (< first): t_min={tgt_min} first={first} tol={tol} file={f0}"
+                )
+            if tgt_min > last + tol:
+                if clamp:
+                    return len(tmins) - 1
+                raise ValueError(
+                    f"t_min out of range (> last): t_min={tgt_min} last={last} tol={tol} file={f0}"
+                )
+            i = bisect.bisect_right(tmins, float(tgt_min) + tol) - 1
+            if i < 0:
+                i = 0
+            if i >= len(tmins):
+                i = len(tmins) - 1
+            return int(i)
+
+        i0 = idx_of(t0_abs)
+
+        # Read current-step instantaneous variables at i0
+        tp0 = _read_netcdf_point(
+            ds0,
+            var_name=v_tp,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=i0,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        ssr0 = _read_netcdf_point(
+            ds0,
+            var_name=v_ssr,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=i0,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        t2m_k = _read_netcdf_point(
+            ds0,
+            var_name=v_t2m,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=i0,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        d2m_k = _read_netcdf_point(
+            ds0,
+            var_name=v_d2m,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=i0,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        u10 = _read_netcdf_point(
+            ds0,
+            var_name=v_u10,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=i0,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        v10 = _read_netcdf_point(
+            ds0,
+            var_name=v_v10,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=i0,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+
+        # Read next-step accumulated vars at t1 (may cross a day boundary)
+        if os.path.abspath(f1) == os.path.abspath(f0):
+            i1 = i0 + 1
+            if i1 >= len(times0):
+                raise ValueError(f"need lookahead beyond file time axis: {f0} i0={i0} nt={len(times0)}")
+            tp1 = _read_netcdf_point(
+                ds0,
+                var_name=v_tp,
+                dim_time=dim_time,
+                dim_lat=dim_lat,
+                dim_lon=dim_lon,
+                time_idx=i1,
+                lat_idx=lat_idx,
+                lon_idx=lon_idx,
+            )
+            ssr1 = _read_netcdf_point(
+                ds0,
+                var_name=v_ssr,
+                dim_time=dim_time,
+                dim_lat=dim_lat,
+                dim_lon=dim_lon,
+                time_idx=i1,
+                lat_idx=lat_idx,
+                lon_idx=lon_idx,
+            )
+            dt_sec = float((times0[i1] - times0[i0]).total_seconds())
+        else:
+            with netCDF4.Dataset(f1, "r") as ds1:
+                time_vals1 = ds1.variables[time_var][:]
+                units1 = getattr(ds1.variables[time_var], "units", None)
+                if not isinstance(units1, str) or not units1.strip():
+                    raise ValueError(f"time variable missing units: {f1}:{time_var}")
+                factor_min1, base_dt1 = _parse_units_since(units1)
+                times1 = [to_dt(base_dt1, factor_min1, float(v)) for v in time_vals1]
+                if not times1:
+                    raise ValueError(f"empty time axis: {f1}:{time_var}")
+                i1 = 0
+                tp1 = _read_netcdf_point(
+                    ds1,
+                    var_name=v_tp,
+                    dim_time=dim_time,
+                    dim_lat=dim_lat,
+                    dim_lon=dim_lon,
+                    time_idx=i1,
+                    lat_idx=lat_idx,
+                    lon_idx=lon_idx,
+                )
+                ssr1 = _read_netcdf_point(
+                    ds1,
+                    var_name=v_ssr,
+                    dim_time=dim_time,
+                    dim_lat=dim_lat,
+                    dim_lon=dim_lon,
+                    time_idx=i1,
+                    lat_idx=lat_idx,
+                    lon_idx=lon_idx,
+                )
+                dt_sec = float((times1[i1] - times0[i0]).total_seconds())
+
+    if dt_sec <= 0.0 or not math.isfinite(float(dt_sec)):
+        raise ValueError(f"invalid dt_sec for ERA5 increment: {dt_sec}")
+
+    # Reset-tolerant forward differences for accumulated variables.
+    # Mirror SHUD/src/classes/NetcdfForcingProvider.cpp (ERA5):
+    # - accumulated fields can reset across stitching boundaries
+    # - float quantization can create small negative deltas even when the true series is constant
+    tp_diff = float(tp1) - float(tp0)
+    tp_tol = max(1e-5, 1e-4 * max(abs(float(tp0)), abs(float(tp1))))  # meters
+    if tp_diff >= -tp_tol:
+        tp_inc_m = max(0.0, float(tp_diff))
+    else:
+        tp_inc_m = max(0.0, float(tp1))
+
+    ssr_diff = float(ssr1) - float(ssr0)
+    ssr_tol = max(1000.0, 1e-4 * max(abs(float(ssr0)), abs(float(ssr1))))  # J/m^2
+    if ssr_diff >= -ssr_tol:
+        ssr_inc_jm2 = max(0.0, float(ssr_diff))
+    else:
+        ssr_inc_jm2 = max(0.0, float(ssr1))
+
+    prcp_mm_day = tp_inc_m * 1000.0 * (86400.0 / float(dt_sec))
+    if not math.isfinite(float(prcp_mm_day)) or prcp_mm_day < 0.0:
+        prcp_mm_day = 0.0
+    prcp_mm_day = round(float(prcp_mm_day), 4)
+    if prcp_mm_day < 0.0001:
+        prcp_mm_day = 0.0
+
+    temp_c = float(t2m_k) - 273.15
+    if not math.isfinite(float(temp_c)):
+        temp_c = 0.0
+    temp_c = round(float(temp_c), 2)
+
+    dew_c = float(d2m_k) - 273.15
+    rh_1 = _era5_rh_from_dewpoint(temp_c=float(temp_c), dew_c=float(dew_c))
+    rh_1 = round(float(rh_1), 4)
+    rh_1 = max(0.0, min(1.0, float(rh_1)))
+
+    wind_ms = math.sqrt(float(u10) * float(u10) + float(v10) * float(v10))
+    wind_ms = 0.0 if not math.isfinite(float(wind_ms)) else float(wind_ms)
+    wind_ms = round(float(wind_ms), 2)
+    if wind_ms < 0.05:
+        wind_ms = 0.05
+
+    rn_wm2 = ssr_inc_jm2 / float(dt_sec)
+    rn_wm2 = 0.0 if not math.isfinite(float(rn_wm2)) else float(rn_wm2)
+    if rn_wm2 < 0.0:
+        rn_wm2 = 0.0
+    rn_wm2 = float(round(float(rn_wm2), 0))
+
+    return {
+        "Precip_mm_day": float(prcp_mm_day),
+        "Temp_C": float(temp_c),
+        "RH_1": float(rh_1),
+        "Wind_m_s": float(wind_ms),
+        "RN_W_m2": float(rn_wm2),
+    }
+
+
+def _gldas_precip_units_kind(units: str) -> str:
+    u = units.strip().lower()
+    if "kg" in u and ("m-2" in u or "m**-2" in u) and ("s-1" in u or "s**-1" in u):
+        return "KG_M2_S"
+    if "mm" in u and ("s-1" in u or "s**-1" in u):
+        return "MM_S"
+    if "mm" in u and ("day" in u or "d-1" in u or "d**-1" in u):
+        return "MM_DAY"
+    return "UNKNOWN"
+
+
+def _gldas_netcdf_at(
+    *,
+    forcing_cfg: Dict[str, str],
+    forc_start_yyyymmdd: int,
+    station_lon_deg: float,
+    station_lat_deg: float,
+    t_min: float,
+    clamp: bool,
+    time_tol_min: float,
+) -> Dict[str, float]:
+    netCDF4 = _require_netCDF4()
+
+    product = forcing_cfg.get("PRODUCT", "").upper()
+    if product != "GLDAS":
+        raise ValueError(f"Only PRODUCT=GLDAS is supported here (got {product!r})")
+
+    data_root = forcing_cfg["DATA_ROOT"]
+    file_pattern = forcing_cfg["LAYOUT_FILE_PATTERN"]
+
+    dim_time = forcing_cfg.get("NC_DIM_TIME", "time")
+    dim_lat = forcing_cfg.get("NC_DIM_LAT", "lat")
+    dim_lon = forcing_cfg.get("NC_DIM_LON", "lon")
+
+    v_prec = forcing_cfg["NC_VAR_PREC"]
+    v_temp = forcing_cfg["NC_VAR_TEMP"]
+    v_shum = forcing_cfg["NC_VAR_SHUM"]
+    v_pres = forcing_cfg["NC_VAR_PRES"]
+    v_wind = forcing_cfg["NC_VAR_WIND"]
+    v_srad = forcing_cfg["NC_VAR_SRAD"]
+
+    # GLDAS NOAH025_3H: one file per 3-hour step.
+    target_dt = _dt_from_forc_start(forc_start_yyyymmdd, float(t_min))
+    step_dt = _floor_dt_to_minute_step(target_dt, 180)
+
+    rel = _format_gldas_path(file_pattern, t=step_dt)
+    fn = os.path.join(data_root, rel)
+
+    with netCDF4.Dataset(fn, "r") as ds:
+        lat_arr = ds.variables[dim_lat][:]
+        lon_arr = ds.variables[dim_lon][:]
+
+        lon_min = float(lon_arr.min())
+        lon_max = float(lon_arr.max())
+        lon_0360 = lon_min >= 0.0 and lon_max > 180.0
+        slon = float(station_lon_deg)
+        if lon_0360:
+            if slon < 0.0:
+                slon += 360.0
+            while slon >= 360.0:
+                slon -= 360.0
+
+        # Nearest grid cell, with optional remap off _FillValue cells (mirrors SHUD's GLDAS behavior).
+        lat_idx0 = int(abs(lat_arr - float(station_lat_deg)).argmin())
+        lon_idx0 = int(abs(lon_arr - slon).argmin())
+
+        def is_valid(ilat: int, ilon: int) -> bool:
+            try:
+                _ = _read_netcdf_point(
+                    ds,
+                    var_name=v_temp,  # SHUD uses TEMP for GLDAS water-mask remap
+                    dim_time=dim_time,
+                    dim_lat=dim_lat,
+                    dim_lon=dim_lon,
+                    time_idx=0,
+                    lat_idx=int(ilat),
+                    lon_idx=int(ilon),
+                )
+                return True
+            except Exception:
+                return False
+
+        lat_idx = lat_idx0
+        lon_idx = lon_idx0
+        if not is_valid(lat_idx0, lon_idx0):
+            max_r = 10  # up to ~2.5 degrees in each direction for 0.25deg grids
+            best_dist2 = float("inf")
+            best: Optional[Tuple[int, int]] = None
+            nlat = int(len(lat_arr))
+            nlon = int(len(lon_arr))
+            for r in range(1, max_r + 1):
+                found = False
+                k_lo = max(0, int(lat_idx0) - r)
+                k_hi = min(nlat - 1, int(lat_idx0) + r)
+                j_lo = max(0, int(lon_idx0) - r)
+                j_hi = min(nlon - 1, int(lon_idx0) + r)
+                for kk in range(k_lo, k_hi + 1):
+                    for jj in range(j_lo, j_hi + 1):
+                        if not is_valid(kk, jj):
+                            continue
+                        dlon = abs(float(lon_arr[jj]) - float(slon))
+                        if lon_0360:
+                            dlon = min(float(dlon), 360.0 - float(dlon))
+                        dlat = abs(float(lat_arr[kk]) - float(station_lat_deg))
+                        dist2 = float(dlon) * float(dlon) + float(dlat) * float(dlat)
+                        if dist2 < best_dist2:
+                            best_dist2 = dist2
+                            best = (kk, jj)
+                            found = True
+                if found:
+                    break
+            if best is None:
+                raise ValueError(
+                    "GLDAS forcing grid cell is missing (_FillValue) for a forcing station "
+                    f"(station lon={station_lon_deg} lat={station_lat_deg}; nearest idx_lat={lat_idx0} idx_lon={lon_idx0}; file={fn})."
+                )
+            lat_idx, lon_idx = best
+        time_idx = 0
+
+        prec_raw = _read_netcdf_point(
+            ds,
+            var_name=v_prec,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=time_idx,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        temp_k = _read_netcdf_point(
+            ds,
+            var_name=v_temp,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=time_idx,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        shum = _read_netcdf_point(
+            ds,
+            var_name=v_shum,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=time_idx,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        pres = _read_netcdf_point(
+            ds,
+            var_name=v_pres,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=time_idx,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        wind = _read_netcdf_point(
+            ds,
+            var_name=v_wind,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=time_idx,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+        srad = _read_netcdf_point(
+            ds,
+            var_name=v_srad,
+            dim_time=dim_time,
+            dim_lat=dim_lat,
+            dim_lon=dim_lon,
+            time_idx=time_idx,
+            lat_idx=lat_idx,
+            lon_idx=lon_idx,
+        )
+
+        units = getattr(ds.variables[v_prec], "units", "")
+        kind = _gldas_precip_units_kind(units if isinstance(units, str) else "")
+        if kind in ("KG_M2_S", "MM_S"):
+            prcp_mm_day = float(prec_raw) * 86400.0
+        elif kind == "MM_DAY":
+            prcp_mm_day = float(prec_raw)
+        else:
+            raise ValueError(f"unknown GLDAS precip units: {units!r}")
+
+        if not math.isfinite(float(prcp_mm_day)) or prcp_mm_day < 0.0:
+            prcp_mm_day = 0.0
+        prcp_mm_day = round(float(prcp_mm_day), 4)
+        if prcp_mm_day < 0.0001:
+            prcp_mm_day = 0.0
+
+        temp_c = float(temp_k) - 273.15
+        if not math.isfinite(float(temp_c)):
+            temp_c = 0.0
+        temp_c = round(float(temp_c), 2)
+
+        rh_percent = 0.263 * float(pres) * float(shum) / math.exp(17.67 * (float(temp_k) - 273.15) / (float(temp_k) - 29.65))
+        rh_percent = max(0.0, min(100.0, float(rh_percent)))
+        rh_1 = rh_percent / 100.0
+        rh_1 = round(float(rh_1), 4)
+        rh_1 = max(0.0, min(1.0, float(rh_1)))
+
+        wind_ms = abs(float(wind))
+        wind_ms = 0.0 if not math.isfinite(float(wind_ms)) else float(wind_ms)
+        wind_ms = round(float(wind_ms), 2)
+        if wind_ms < 0.05:
+            wind_ms = 0.05
+
+        rn_wm2 = float(srad)
+        rn_wm2 = 0.0 if not math.isfinite(float(rn_wm2)) else float(rn_wm2)
+        if rn_wm2 < 0.0:
+            rn_wm2 = 0.0
+        rn_wm2 = float(round(float(rn_wm2), 0))
+
+        return {
+            "Precip_mm_day": float(prcp_mm_day),
+            "Temp_C": float(temp_c),
+            "RH_1": float(rh_1),
+            "Wind_m_s": float(wind_ms),
+            "RN_W_m2": float(rn_wm2),
+        }
+
+
 def _summarize_diffs(samples: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     vars_ = ["Precip_mm_day", "Temp_C", "RH_1", "Wind_m_s", "RN_W_m2"]
     summary: Dict[str, Any] = {}
@@ -488,7 +1066,7 @@ def _summarize_diffs(samples: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def main(argv: Sequence[str]) -> int:
-    p = argparse.ArgumentParser(description="Sampled forcing compare: baseline CSV vs NetCDF (CMFD2)")
+    p = argparse.ArgumentParser(description="Sampled forcing compare: baseline CSV vs NetCDF (CMFD2/ERA5/GLDAS)")
     p.add_argument("--baseline-run", required=True, help="Baseline run_dir (contains input/<prj>/<prj>.tsd.forc)")
     p.add_argument("--nc-run", required=True, help="NC run_dir (contains input/<prj>/<prj>.cfg.forcing)")
     p.add_argument("--prj", required=True, help="Project name (e.g. qhh)")
@@ -521,7 +1099,6 @@ def main(argv: Sequence[str]) -> int:
     tsd = _read_tsd_forc(baseline_tsd_forc)
     forc_start = tsd.forc_start_yyyymmdd
 
-    baseline_input_dir = os.path.join(baseline_run, "input", prj)
     forcing_cfg_path = os.path.join(nc_run, "input", prj, f"{prj}.cfg.forcing")
 
     forcing_cfg = _read_kv_cfg(forcing_cfg_path)
@@ -533,7 +1110,7 @@ def main(argv: Sequence[str]) -> int:
 
     for sidx in stations_idx:
         st = tsd.stations[sidx]
-        csv_path = _resolve_station_csv_path(baseline_input_dir, tsd.rel_path, st.filename)
+        csv_path = _resolve_station_csv_path(baseline_run, tsd.rel_path, st.filename)
         for tmin in times_min:
             base_vals = _read_station_csv_at(csv_path, tmin)
             base_map = {
@@ -543,15 +1120,39 @@ def main(argv: Sequence[str]) -> int:
                 "Wind_m_s": base_vals[3],
                 "RN_W_m2": base_vals[4],
             }
-            nc_map = _cmfd2_netcdf_at(
-                forcing_cfg=forcing_cfg,
-                forc_start_yyyymmdd=forc_start,
-                station_lon_deg=st.lon_deg,
-                station_lat_deg=st.lat_deg,
-                t_min=tmin,
-                clamp=bool(args.clamp),
-                time_tol_min=float(args.time_tol_min),
-            )
+            product = forcing_cfg.get("PRODUCT", "").upper()
+            if product == "CMFD2":
+                nc_map = _cmfd2_netcdf_at(
+                    forcing_cfg=forcing_cfg,
+                    forc_start_yyyymmdd=forc_start,
+                    station_lon_deg=st.lon_deg,
+                    station_lat_deg=st.lat_deg,
+                    t_min=tmin,
+                    clamp=bool(args.clamp),
+                    time_tol_min=float(args.time_tol_min),
+                )
+            elif product == "ERA5":
+                nc_map = _era5_netcdf_at(
+                    forcing_cfg=forcing_cfg,
+                    forc_start_yyyymmdd=forc_start,
+                    station_lon_deg=st.lon_deg,
+                    station_lat_deg=st.lat_deg,
+                    t_min=tmin,
+                    clamp=bool(args.clamp),
+                    time_tol_min=float(args.time_tol_min),
+                )
+            elif product == "GLDAS":
+                nc_map = _gldas_netcdf_at(
+                    forcing_cfg=forcing_cfg,
+                    forc_start_yyyymmdd=forc_start,
+                    station_lon_deg=st.lon_deg,
+                    station_lat_deg=st.lat_deg,
+                    t_min=tmin,
+                    clamp=bool(args.clamp),
+                    time_tol_min=float(args.time_tol_min),
+                )
+            else:
+                raise ValueError(f"Unsupported PRODUCT in cfg.forcing: {product!r} ({forcing_cfg_path})")
             diff = {k: float(base_map[k]) - float(nc_map[k]) for k in base_map.keys()}
             samples.append(
                 {

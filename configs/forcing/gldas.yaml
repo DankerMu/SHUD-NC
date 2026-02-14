@@ -1,0 +1,47 @@
+name: gldas
+title: "GLDAS NOAH 0.25deg (3-hour) -> SHUD forcing"
+
+# NOTE: This file is a spec/template for the SHUD NetCDF-forcing implementation.
+# Dataset example:
+#   Data/Forcing/GLDAS/<year>/<doy>/GLDAS_NOAH025_3H.A<yyyymmdd>.<hhmm>.021.nc4
+#
+# Goal: map GLDAS variables to SHUD forcing:
+# - Precip (mm/day), Temp (C), RH (0-1), Wind (m/s), RN (W/m2)
+
+layout:
+  # Example:
+  #   2017/001/GLDAS_NOAH025_3H.A20170101.0000.021.nc4
+  file_pattern: "{year}/{doy}/GLDAS_NOAH025_3H.A{yyyymmdd}.{hhmm}.021.nc4"
+
+netcdf:
+  dims:
+    time: "time"
+    lat: "lat"
+    lon: "lon"
+  var_names:
+    # SHUD expects the same 6-variable "CMFD-style" inputs; GLDAS provides them
+    # under different names (see conversion notes below).
+    Prec: "Rainf_f_tavg"    # kg/m^2/s
+    Temp: "Tair_f_inst"     # K
+    SHum: "Qair_f_inst"     # kg/kg (specific humidity)
+    Pres: "Psurf_f_inst"    # Pa
+    Wind: "Wind_f_inst"     # m/s
+    SRad: "SWdown_f_tavg"   # W/m^2
+
+conversion:
+  precip:
+    # Rainf_f_tavg is a flux (kg/m^2/s). Convert to SHUD's mm/day rate:
+    to_mm_per_day_if_units_kg_m2_s: "Prec * 86400"
+    min_mm_per_day: 0.0001
+  temperature:
+    to_celsius: "Temp - 273.15"
+  rh:
+    # Same as CMFD2: specific humidity + pressure + temperature -> RH(%), then /100.
+    formula: "0.263*Pres*SHum/exp(17.67*(Temp-273.15)/(Temp-29.65))"
+    clamp_percent_max: 100
+    to_ratio: "rh_percent / 100"
+  wind:
+    to_m_per_s: "abs(Wind)"
+  rn:
+    to_w_per_m2: "SRad"
+    radiation_kind: "SWDOWN"

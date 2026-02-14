@@ -64,8 +64,42 @@ profiles:
       forcing:
         # AutoSHUD forcing code: 0.5 = CMFD.
         code: 0.5
-        dir_ldas: Data/Forcing/CMFD_2017_2018
+        dir_ldas: Data/Forcing/CMFD2
         csv_dir: runs/qhh/baseline/forcing
+    shud:
+      run: true
+      forcing_mode: csv
+      output_mode: legacy
+
+  # Baseline (CSV): ERA5 at the same forcing stations as `baseline` (for regression vs NetCDF ERA5).
+  era5_baseline:
+    run_dir: runs/qhh/era5_baseline
+    autoshud:
+      # Intentionally empty by default: we reuse existing Step1–Step3 static inputs and
+      # generate forcing CSV via tooling (see tools/gen_forcing_baseline.py).
+      steps: []
+      forcing:
+        # AutoSHUD does not natively support ERA5 yet (reserved code for future).
+        code: 0.7
+        dir_ldas: Data/Forcing/ERA5
+        csv_dir: runs/qhh/era5_baseline/forcing
+    shud:
+      run: true
+      forcing_mode: csv
+      output_mode: legacy
+
+  # Baseline (CSV): GLDAS at the same forcing stations as `baseline` (for regression vs NetCDF GLDAS).
+  gldas_baseline:
+    run_dir: runs/qhh/gldas_baseline
+    autoshud:
+      # Intentionally empty by default: we reuse existing Step1–Step3 static inputs and
+      # generate forcing CSV via tooling (see tools/gen_forcing_baseline.py).
+      steps: []
+      forcing:
+        # AutoSHUD forcing code: 0.3 = GLDAS.
+        code: 0.3
+        dir_ldas: Data/Forcing/GLDAS
+        csv_dir: runs/qhh/gldas_baseline/forcing
     shud:
       run: true
       forcing_mode: csv
@@ -79,7 +113,7 @@ profiles:
       forcing_mode: netcdf
       forcing:
         product: cmfd2
-        dir: Data/Forcing/CMFD_2017_2018
+        dir: Data/Forcing/CMFD2
         adapter: configs/forcing/cmfd2.yaml
         kv:
           # Compatibility override: match the existing baseline forcing CSV
@@ -87,8 +121,12 @@ profiles:
           CMFD_PRECIP_UNITS: MM_HR
         # Switch to ERA5 (QHH subset example):
         # product: era5
-        # dir: Data/Forcing/ERA5/qhh
+        # dir: Data/Forcing/ERA5
         # adapter: configs/forcing/era5.yaml
+        # Switch to GLDAS (global 0.25deg, 3-hour, one file per timestep):
+        # product: gldas
+        # dir: Data/Forcing/GLDAS
+        # adapter: configs/forcing/gldas.yaml
       output_mode: legacy
       output:
         schema: configs/output/ugrid.yaml

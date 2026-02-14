@@ -691,7 +691,9 @@ def main(argv: List[str]) -> int:
         print(f"# would write: {gen_file}")
 
     if args.command in ("autoshud", "run"):
-        steps = _get(profile_cfg, "autoshud.steps", required=False) or [1, 2, 3]
+        steps = _get(profile_cfg, "autoshud.steps", required=False)
+        if steps is None:
+            steps = [1, 2, 3]
         step_map = {1: "Step1_RawDataProcessng.R", 2: "Step2_DataSubset.R", 3: "Step3_BuidModel.R"}
         for step in steps:
             step_i = _as_int(step, key=f"profiles.{profile}.autoshud.steps[]")
