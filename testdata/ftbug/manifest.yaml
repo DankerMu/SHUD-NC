@@ -1,0 +1,99 @@
+seed: 42
+generator: "tools/r/build_ftbug_fixture.R"
+output_dir: "testdata/ftbug"
+crs:
+  epsg: 32648
+  name: "WGS 84 / UTM zone 48N"
+dem:
+  file: "dem.tif"
+  formula: "z = 2500 - 0.0006 * (x - 500000) + 0.01 * (y - 4200000)"
+  resolution_m: 100
+  extent:
+    xmin: 499800
+    xmax: 502300
+    ymin: 4198000
+    ymax: 4201800
+network:
+  reach_count: 6
+  outlet_down_code: -3
+  topology:
+    - index: 1
+      reach: "R1"
+      type: 1
+      down: 3
+    - index: 2
+      reach: "R2"
+      type: 1
+      down: 3
+    - index: 3
+      reach: "R3"
+      type: 2
+      down: 5
+    - index: 4
+      reach: "R4"
+      type: 1
+      down: 5
+    - index: 5
+      reach: "R5"
+      type: 3
+      down: 6
+    - index: 6
+      reach: "R6"
+      type: 3
+      down: -3
+reaches:
+  - index: 1
+    reach: "R1"
+    type: 1
+    down: 3
+    vertices: 61
+    length_m: 1045.906584
+    slope: 0.0087770745
+    slope_class: "medium"
+  - index: 2
+    reach: "R2"
+    type: 1
+    down: 3
+    vertices: 57
+    length_m: 994.672305
+    slope: 0.008867242
+    slope_class: "medium"
+  - index: 3
+    reach: "R3"
+    type: 2
+    down: 5
+    vertices: 67
+    length_m: 775.625587
+    slope: 0.0068331939
+    slope_class: "medium"
+  - index: 4
+    reach: "R4"
+    type: 1
+    down: 5
+    vertices: 49
+    length_m: 752.047051
+    slope: 0.0032178838
+    slope_class: "medium"
+  - index: 5
+    reach: "R5"
+    type: 3
+    down: 6
+    vertices: 73
+    length_m: 918.893976
+    slope: 0.000587663
+    slope_class: "gentle"
+  - index: 6
+    reach: "R6"
+    type: 3
+    down: -3
+    vertices: 55
+    length_m: 1720.224233
+    slope: 0.0099173117
+    slope_class: "steep"
+files:
+  river_shp: "river.shp"
+  basin_shp: "basin.shp"
+  truth_down_csv: "truth_down.csv"
+  truth_type_csv: "truth_type.csv"
+  truth_nodes_csv: "truth_nodes.csv"
+  truth_sp_riv: "truth.sp.riv"
