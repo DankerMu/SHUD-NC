@@ -657,57 +657,60 @@ $$\mathrm{noise}(M) = \max\left(\mathrm{diff}(\text{fixed}, \text{truth}; M),\ \
 
 #### QrivDown 时序对比
 
-![图 13：QrivDown 5-case 时序对比](../testdata/ftbug/fig13_qdown_5case.png)
+![图 13：QrivDown — 正确组 vs Buggy 组](../testdata/ftbug/fig13_qdown_5case.png)
 
 **图 13 解读**：
 - 2×3 布局，每个子图为一条河段（R1–R6），Y 轴 log 尺度
-- **黑线（truth）和蓝线（fixed）完全重合**——肉眼无法区分，确认 fix 正确
-- **红线（old）和橙色虚线（slope-only）完全重合**——确认 Slope 是唯一污染通道
-- **青色虚线（point-only）与蓝线（fixed）完全重合**——确认 @point 无影响
-- old/slope-only 与 truth/fixed 的分离在初始排水期最显著：R1–R4 中 old 线低于 truth（BedSlope 被钳制到 4×10⁻⁴ 导致 Manning 流量降低），但 R5、R6 中因上游积水反馈，差异模式更复杂
-- 所有 case 在 5–10 天后趋于收敛——系统排空后差异消失
+- 5 个 case 折叠为 **2 组**（因果隔离实验证明只有 2 种不同输出）：
+  - **黑线（Correct 组）**= truth / fixed / point-only — 三者 bit-identical
+  - **红线（Buggy 组）**= old / slope-only — 两者 bit-identical
+- **红色填充带** = bug 导致的偏差范围，直观展示 Slope 错误的影响幅度
+- 各河段标注了最大相对偏差：R1: 351%, R2: 356%, R3: 248%, R4: 62%, R5: 219%, R6: 218%
+- 初始排水期（0–1 天）偏差最大：buggy 组排水更慢（BedSlope 被钳制），流量初始更低但衰减更慢
+- 5–10 天后所有 case 趋于收敛——系统排空后差异消失
+- 底部注释框说明等价关系和验证方式
 
 #### 河道水深时序对比
 
-![图 14：河道水深 5-case 时序对比](../testdata/ftbug/fig14_stage_5case.png)
+![图 14：河道水深 — 正确组 vs Buggy 组](../testdata/ftbug/fig14_stage_5case.png)
 
 **图 14 解读**：
-- 线性 Y 轴显示水深（m），清晰展示 bug 的水位影响
-- **old/slope-only（红线）水位显著高于 truth/fixed（黑线）**——这是 bug 的直接后果：BedSlope 过低导致排水速度减慢、水量蓄积
-- 差异在 R5（主干）和 R6（出口）最为显著：old 的 R6 水深在 10 天后仍维持 ~0.08 m，而 truth 已降至 ~0.03 m
-- R1–R4 中差异模式一致但幅度较小（上游河段水量少、影响传播较短）
-- truth/fixed/point-only 三条线完全重合（黑/蓝/青不可分辨）
+- 线性 Y 轴显示水深（m），红色填充带清晰展示 bug 的水位影响
+- **buggy 组（红线）水位显著高于 correct 组（黑线）**——BedSlope 过低导致排水速度减慢、水量蓄积
+- 各河段标注最大绝对偏差：R1: 0.454 m, R2: 0.445 m, R3: 0.267 m, R4: 0.111 m, R5: 0.353 m, R6: 0.379 m
+- R5（主干）和 R6（出口）偏差最持久：buggy 组在 10 天后仍维持 ~0.08 m 水深，而 correct 组已降至 ~0.03 m
+- 底部注释：bug 导致水体蓄积（排水变慢），这是 BedSlope 钳制的直接物理后果
 
 #### 成对差异热力图
 
 ![图 15：5-case 成对差异热力图](../testdata/ftbug/fig15_pairwise_diff.png)
 
 **图 15 解读**：
-- 4 个面板分别为 QrivDown 绝对差、Stage 绝对差、QrivDown 相对差、Stage 相对差
+- 4 个面板分别为 QrivDown 绝对差（m³/day）、Stage 绝对差（m）、QrivDown 相对差、Stage 相对差
 - **清晰的块结构**：{truth, fixed, point-only} 形成一个 cluster（相互差异≈0），{old, slope-only} 形成另一个 cluster（差异=0）；cross-cluster 差异巨大
 - 彩色边框标注 4 个关键关系：
   - 🟩 绿框（old ≡ slope-only）：diff = 0，完全相同
   - 🟦 蓝框（point-only ≡ fixed）：diff = 0，完全相同
-  - 🟪 紫框（fixed ≈ truth）：diff 极小（1.1 / 7.3e-6）
-  - 🟥 红框（old ≠ fixed）：diff 巨大（1.7e5 / 0.454）
-- QrivDown 最大相对差：old vs fixed = 357%（R2, t=120 min）
-- Stage 最大相对差：old vs fixed = 407%（R2, t=120 min）
+  - 🟪 紫框（fixed ≈ truth）：diff 极小（1.1 m³/day / 7.3e-6 m）
+  - 🟥 红框（old ≠ fixed）：diff 巨大（1.7e5 m³/day / 0.454 m）
+- QrivDown 最大相对差：old vs truth = 356%（R2）
+- Stage 最大相对差：old vs truth = 407%（R1）
 
 #### 验收条件总结仪表板
 
 ![图 16：验收条件总结仪表板](../testdata/ftbug/fig16_acceptance_summary.png)
 
 **图 16 解读**：
-- **左面板（Criteria A–D）**：柱状图显示实际差异 vs 阈值
-  - A 和 C 的差异为 0（柱高为零），远低于阈值——PASS
-  - B 的差异微小（~1 m³/min），远低于阈值——PASS
-  - D 的差异巨大（~1.7×10⁵ m³/min），远高于阈值——PASS
-  - 白色圆点 = noise floor，黑色横线 = 阈值
+- **左面板（Criteria A–D）**：柱状图显示实际差异 vs 阈值（log 尺度）
+  - A 和 C 的差异为 0（底部标"0"），远低于阈值——PASS
+  - B 的差异微小（~1 m³/day），远低于阈值——PASS
+  - D 的差异巨大（~1.7×10⁵ m³/day），远高于阈值——PASS
+  - 黑色横线 = 阈值
 - **右上面板（BedSlope by Solver）**：分组柱状图展示 solver 实际使用的 BedSlope
   - truth（黑）/fixed（蓝）/point-only（青）的 BedSlope 在每个河段上一致
   - old（红）/slope-only（橙）的 R1–R4、R6 全部被钳制到 MINRIVSLOPE = 4×10⁻⁴（灰色虚线）
-  - 只有 R5 的 old 值（0.00109）高于 MINRIVSLOPE（因为 old 版本恰好给 R5 计算出了一个正但偏差的坡度）
-- **右下面板（Key Numbers）**：汇总所有条件的 PASS/FAIL 状态和关键数值
+  - 只有 R5 的 old 值（0.00109）高于 MINRIVSLOPE
+- **右下面板（Summary）**：等宽字体汇总 A–F 结果、noise floor 和关键偏差数值，单位为 m³/day
 
 ### 5.6 Phase 5 通过条件
 
