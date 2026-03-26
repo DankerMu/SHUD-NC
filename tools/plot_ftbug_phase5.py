@@ -66,6 +66,82 @@ CASE_STYLES = {
     },
 }
 
+QDOWN_REPRESENTATIVE_RIVERS = [
+    (0, "R1 (headwater)"),
+    (2, "R3 (confluence)"),
+    (5, "R6 (outlet)"),
+]
+QDOWN_RAW_STYLES = {
+    "truth": {
+        "label": "truth",
+        "color": "black",
+        "linestyle": "-",
+        "linewidth": 3.0,
+        "zorder": 5,
+    },
+    "fixed": {
+        "label": "fixed",
+        "color": "tab:blue",
+        "linestyle": "--",
+        "linewidth": 1.5,
+        "zorder": 6,
+    },
+    "old": {
+        "label": "old",
+        "color": "tab:red",
+        "linestyle": "-",
+        "linewidth": 3.0,
+        "zorder": 2,
+    },
+    "slope-only": {
+        "label": "slope-only",
+        "color": "darkorange",
+        "linestyle": "--",
+        "linewidth": 1.5,
+        "zorder": 3,
+    },
+    "point-only": {
+        "label": "point-only",
+        "color": "cyan",
+        "linestyle": ":",
+        "linewidth": 1.0,
+        "zorder": 7,
+    },
+}
+QDOWN_DIFF_STYLES = {
+    "old-truth": {
+        "label": "old - truth",
+        "color": "tab:red",
+        "linestyle": "-",
+        "linewidth": 2.0,
+        "zorder": 2,
+    },
+    "fixed-truth": {
+        "label": "fixed - truth",
+        "color": "tab:blue",
+        "linestyle": "-",
+        "linewidth": 1.5,
+        "zorder": 3,
+    },
+    "slope-only-truth": {
+        "label": "slope-only - truth",
+        "color": "darkorange",
+        "linestyle": "--",
+        "linewidth": 1.5,
+        "zorder": 4,
+    },
+    "point-only-truth": {
+        "label": "point-only - truth",
+        "color": "cyan",
+        "linestyle": ":",
+        "linewidth": 1.0,
+        "zorder": 5,
+    },
+}
+QDOWN_RAW_PLOT_ORDER = ["old", "slope-only", "truth", "fixed", "point-only"]
+QDOWN_DIFF_PLOT_ORDER = ["old-truth", "fixed-truth", "slope-only-truth", "point-only-truth"]
+RELATIVE_DIFF_REFERENCE = 0.01
+
 HIGHLIGHT_PAIRS = {
     ("old", "slope-only"): {"label": "old ≡ slope-only", "color": "#2ca02c"},
     ("point-only", "fixed"): {"label": "point-only ≡ fixed", "color": "#1f77b4"},
@@ -236,6 +312,26 @@ def format_value(value: float | None) -> str:
     return f"{value:.4f}".rstrip("0").rstrip(".")
 
 
+def format_relative_annotation(value: float) -> str:
+    if value >= 0.01:
+        return f"{value:.2%}"
+    if value >= 1e-4:
+        return f"{value:.3%}"
+    return f"{value:.2e}"
+
+
+def min_positive_value(*arrays: np.ndarray, fallback: float = 1e-12) -> float:
+    minima: list[float] = []
+    for array in arrays:
+        positive = np.asarray(array, dtype=float)
+        positive = positive[positive > 0.0]
+        if positive.size:
+            minima.append(float(np.min(positive)))
+    if not minima:
+        return fallback
+    return min(minima)
+
+
 def add_shared_legend(fig: plt.Figure) -> None:
     handles = [
         Line2D([0], [0], color=CASE_STYLES[case]["color"], linestyle=CASE_STYLES[case]["linestyle"],
@@ -249,6 +345,181 @@ def add_shared_legend(fig: plt.Figure) -> None:
         frameon=False,
         bbox_to_anchor=(0.5, 0.985),
     )
+
+
+def add_qdown_shared_legend(fig: plt.Figure) -> None:
+    handles = [
+        Line2D(
+            [0],
+            [0],
+            color=QDOWN_RAW_STYLES[case]["color"],
+            linestyle=QDOWN_RAW_STYLES[case]["linestyle"],
+            linewidth=QDOWN_RAW_STYLES[case]["linewidth"],
+            label=QDOWN_RAW_STYLES[case]["label"],
+        )
+        for case in CASE_ORDER
+    ]
+    handles.extend(
+        Line2D(
+            [0],
+            [0],
+            color=QDOWN_DIFF_STYLES[key]["color"],
+            linestyle=QDOWN_DIFF_STYLES[key]["linestyle"],
+            linewidth=QDOWN_DIFF_STYLES[key]["linewidth"],
+            label=QDOWN_DIFF_STYLES[key]["label"],
+        )
+        for key in QDOWN_DIFF_PLOT_ORDER
+    )
+    handles.extend(
+        [
+            Line2D([0], [0], color="0.35", linestyle="--", linewidth=1.2, label="noise floor"),
+            Line2D([0], [0], color="0.35", linestyle=":", linewidth=1.2, label="1% reference"),
+        ]
+    )
+    fig.legend(
+        handles=handles,
+        loc="upper center",
+        ncol=6,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.972),
+        columnspacing=1.3,
+        handlelength=2.8,
+    )
+
+
+def plot_qrivdown_five_case_figure(
+    series_by_case: dict[str, dict[str, Any]], noise_floor: float, output_path: Path
+) -> None:
+    reference = series_by_case[CASE_ORDER[0]]
+    times_days = reference["times"] / (60.0 * 24.0)
+    n_rivers = reference["n_rivers"]
+    x_limit = math.ceil(float(times_days[-1]))
+    x_ticks = nice_days_ticks(float(times_days[-1]))
+    safe_noise_floor = max(float(noise_floor), 1e-12)
+
+    for river_idx, title in QDOWN_REPRESENTATIVE_RIVERS:
+        if river_idx >= n_rivers:
+            raise ValueError(f"Representative river {title} is missing; only found {n_rivers} rivers")
+
+    fig, axes = plt.subplots(3, 3, figsize=(18, 14), sharex=True)
+
+    for col_idx, (river_idx, title) in enumerate(QDOWN_REPRESENTATIVE_RIVERS):
+        raw_ax = axes[0, col_idx]
+        abs_ax = axes[1, col_idx]
+        rel_ax = axes[2, col_idx]
+
+        raw_series = {
+            case: np.asarray(series_by_case[case]["values"][:, river_idx], dtype=float)
+            for case in CASE_ORDER
+        }
+        truth = raw_series["truth"]
+        truth_abs = np.abs(truth)
+        abs_diff_series = {
+            "old-truth": np.abs(raw_series["old"] - truth),
+            "fixed-truth": np.abs(raw_series["fixed"] - truth),
+            "slope-only-truth": np.abs(raw_series["slope-only"] - truth),
+            "point-only-truth": np.abs(raw_series["point-only"] - truth),
+        }
+        rel_diff_series = {
+            key: np.divide(
+                values,
+                truth_abs,
+                out=np.zeros_like(values),
+                where=truth_abs > 0.0,
+            )
+            for key, values in abs_diff_series.items()
+        }
+
+        raw_ymax = max(float(np.max(values)) for values in raw_series.values())
+        raw_ymin = min_positive_value(*raw_series.values(), fallback=safe_noise_floor)
+        for case in QDOWN_RAW_PLOT_ORDER:
+            style = QDOWN_RAW_STYLES[case]
+            raw_ax.plot(
+                times_days,
+                raw_series[case],
+                color=style["color"],
+                linestyle=style["linestyle"],
+                linewidth=style["linewidth"],
+                zorder=style["zorder"],
+            )
+        raw_ax.set_title(title)
+        raw_ax.set_yscale("log", nonpositive="clip")
+        raw_ax.set_ylim(raw_ymin * 0.8, raw_ymax * 1.2)
+
+        abs_ymax = max(max(float(np.max(values)) for values in abs_diff_series.values()), safe_noise_floor)
+        abs_ymin = min_positive_value(
+            np.asarray([safe_noise_floor], dtype=float),
+            *abs_diff_series.values(),
+            fallback=safe_noise_floor,
+        )
+        for key in QDOWN_DIFF_PLOT_ORDER:
+            style = QDOWN_DIFF_STYLES[key]
+            abs_ax.plot(
+                times_days,
+                abs_diff_series[key],
+                color=style["color"],
+                linestyle=style["linestyle"],
+                linewidth=style["linewidth"],
+                zorder=style["zorder"],
+            )
+        abs_ax.axhline(safe_noise_floor, color="0.35", linestyle="--", linewidth=1.2, zorder=1)
+        abs_ax.set_yscale("log", nonpositive="clip")
+        abs_ax.set_ylim(abs_ymin * 0.8, abs_ymax * 1.2)
+
+        rel_ymax = max(
+            max(float(np.max(values)) for values in rel_diff_series.values()),
+            RELATIVE_DIFF_REFERENCE,
+        )
+        rel_ymin = min_positive_value(
+            np.asarray([RELATIVE_DIFF_REFERENCE], dtype=float),
+            *rel_diff_series.values(),
+            fallback=1e-12,
+        )
+        for key in QDOWN_DIFF_PLOT_ORDER:
+            style = QDOWN_DIFF_STYLES[key]
+            rel_ax.plot(
+                times_days,
+                rel_diff_series[key],
+                color=style["color"],
+                linestyle=style["linestyle"],
+                linewidth=style["linewidth"],
+                zorder=style["zorder"],
+            )
+        rel_ax.axhline(RELATIVE_DIFF_REFERENCE, color="0.35", linestyle=":", linewidth=1.2, zorder=1)
+        rel_ax.set_yscale("log", nonpositive="clip")
+        rel_ax.set_ylim(rel_ymin * 0.8, rel_ymax * 1.2)
+        rel_ax.text(
+            0.03,
+            0.97,
+            "\n".join(
+                [
+                    f"max old: {format_relative_annotation(float(np.max(rel_diff_series['old-truth'])))}",
+                    f"max fixed: {format_relative_annotation(float(np.max(rel_diff_series['fixed-truth'])))}",
+                ]
+            ),
+            transform=rel_ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=9,
+            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.88, "edgecolor": "#cccccc"},
+        )
+
+        for row_ax in (raw_ax, abs_ax, rel_ax):
+            row_ax.set_xlim(0.0, x_limit)
+            row_ax.set_xticks(x_ticks)
+            row_ax.grid(True, which="major", alpha=0.28)
+            row_ax.grid(True, which="minor", alpha=0.12)
+
+    axes[0, 0].set_ylabel("QrivDown (m$^3$/day)")
+    axes[1, 0].set_ylabel(r"|$\Delta Q$| (m$^3$/day)")
+    axes[2, 0].set_ylabel(r"Relative |$\Delta Q / Q$|")
+
+    fig.suptitle("QrivDown: 5-case Ablation - Raw + Absolute + Relative Differences", fontsize=16, y=0.994)
+    fig.supxlabel("Time (days)", y=0.035)
+    add_qdown_shared_legend(fig)
+    fig.tight_layout(rect=(0.04, 0.05, 1.0, 0.88))
+    fig.savefig(output_path, dpi=FIG_DPI)
+    plt.close(fig)
 
 
 def plot_time_series_grid(
@@ -630,13 +901,10 @@ def main() -> int:
     metric_series = {metric_name: load_metric_series(metric_name, cases) for metric_name in METRIC_FILES}
     bedslope_summary = load_bedslope_summary(cases)
 
-    plot_time_series_grid(
-        "rivqdown",
+    plot_qrivdown_five_case_figure(
         metric_series["rivqdown"],
-        "QrivDown: 5-case Ablation Comparison",
-        "QrivDown (m$^3$/min)",
+        float(report["noise_floor"]["rivqdown"]["noise"]),
         OUTPUT_DIR / "fig13_qdown_5case.png",
-        log_y=True,
     )
     plot_time_series_grid(
         "rivystage",
