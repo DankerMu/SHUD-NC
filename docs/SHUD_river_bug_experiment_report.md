@@ -72,7 +72,7 @@ R4(type1) ─────────────/
 | R5 | 6 | 3 | 主干 |
 | R6 | -3 | 3 | 出口 |
 
-![图 1：合成河网总览](/testdata/ftbug/fig1_network_overview.png)
+![图 1：合成河网总览](../testdata/ftbug/fig1_network_overview.png)
 
 **图 1 解读**：
 - 蓝色 = Type 1（支流 R1、R2、R4），绿色 = Type 2（汇流段 R3），红色 = Type 3（主干 R5、出口 R6）
@@ -98,7 +98,7 @@ R4(type1) ─────────────/
 
 **Bug 触发条件验证**：`st_simplify` 以 `tol = (extent_x) × 0.01 ≈ 18 m` 简化后，362 个原始顶点被压缩到仅 **7 个**唯一端点。N/M = 362/7 ≈ **51.7×**，远超索引错配的触发阈值。
 
-![图 4：顶点密度与 simplify 效果](/testdata/ftbug/fig4_vertex_density.png)
+![图 4：顶点密度与 simplify 效果](../testdata/ftbug/fig4_vertex_density.png)
 
 **图 4 解读**：
 - 彩色点 = 原始顶点（颜色编码沿线位置），灰色线 = 原始 polyline
@@ -116,7 +116,7 @@ $$z = 2500 - 0.0006 \times (x - 500000) + 0.01 \times (y - 4200000)$$
 - 主梯度方向：y 方向（北高南低，系数 0.01），x 方向有微弱倾斜（系数 -0.0006）
 - 所有河段端点对齐到 DEM 栅格中心，DEM 提取高程与解析公式**零误差**
 
-![图 2：DEM 高程面与河网叠加](/testdata/ftbug/fig2_dem_with_rivers.png)
+![图 2：DEM 高程面与河网叠加](../testdata/ftbug/fig2_dem_with_rivers.png)
 
 **图 2 解读**：
 - 底图 = DEM 高程面，颜色从深绿（高，~2515 m）到浅黄/白（低，~2480 m）
@@ -135,7 +135,7 @@ $$z = 2500 - 0.0006 \times (x - 500000) + 0.01 \times (y - 4200000)$$
 | R5 | **0.000588** | **gentle** | 接近 MINRIVSLOPE = 4×10⁻⁴，测试 clamp 边界 |
 | R6 | **0.00992** | **steep** | 最大坡度，bug 导致的流量偏差最显著 |
 
-![图 3：各河段坡度（log 尺度）](/testdata/ftbug/fig3_slope_profile.png)
+![图 3：各河段坡度（log 尺度）](../testdata/ftbug/fig3_slope_profile.png)
 
 **图 3 解读**：
 - 柱状图为 log 纵坐标，颜色编码坡度类别：红 = steep，橙 = medium，绿 = gentle
@@ -239,7 +239,7 @@ Index Down Type Slope       Length      BC
 
 ### 2.2 坡度对比结果
 
-![图 5：坡度三方对比 — Truth vs Fixed vs Old](/testdata/ftbug/fig5_slope_comparison.png)
+![图 5：坡度三方对比 — Truth vs Fixed vs Old](../testdata/ftbug/fig5_slope_comparison.png)
 
 **图 5 解读**：
 - 绿色 = Truth（独立手算），蓝色 = Fixed（修复后 rSHUD），红色 = Old（旧版 rSHUD）
@@ -252,7 +252,7 @@ Index Down Type Slope       Length      BC
 
 ### 2.3 坡度散点图
 
-![图 7：坡度散点 — Truth vs Old（左）和 Truth vs Fixed（右）](/testdata/ftbug/fig7_slope_scatter.png)
+![图 7：坡度散点 — Truth vs Old（左）和 Truth vs Fixed（右）](../testdata/ftbug/fig7_slope_scatter.png)
 
 **图 7 解读**：
 - **右图（Truth vs Fixed）**：所有 6 个点紧贴 1:1 线，fixed 坡度 = truth 坡度，**修复正确**
@@ -264,7 +264,7 @@ Index Down Type Slope       Length      BC
 
 ### 2.4 端点坐标错配
 
-![图 6：From 端点错配 — Truth vs Old](/testdata/ftbug/fig6_point_mismatch.png)
+![图 6：From 端点错配 — Truth vs Old](../testdata/ftbug/fig6_point_mismatch.png)
 
 **图 6 解读**：
 - 绿色圆点 = 真实 From 端点位置，红色 × = old 版本 @point 记录的 From 位置
@@ -275,7 +275,7 @@ Index Down Type Slope       Length      BC
 
 ### 2.5 量化汇总
 
-![图 8：Phase 2 总结仪表板](/testdata/ftbug/fig8_phase2_summary.png)
+![图 8：Phase 2 总结仪表板](../testdata/ftbug/fig8_phase2_summary.png)
 
 **图 8 解读**：
 - **Panel 1（Slope Error）**：fixed 坡度误差 2.21×10⁻⁷（蓝，浮点精度级），old 坡度误差 9.92×10⁻³（红，4.5 个数量级差距）
@@ -365,7 +365,7 @@ Old 的坐标偏差达到 **km 级**，高程偏差达到 **数十米**。
 
 ### 3.1 三角形网格
 
-![图 9：SHUD 三角形网格与河网叠加](/testdata/ftbug/fig9_mesh_overview.png)
+![图 9：SHUD 三角形网格与河网叠加](../testdata/ftbug/fig9_mesh_overview.png)
 
 **图 9 解读**：
 - 16 个三角形元素（标号 1–16），11 个节点
@@ -375,7 +375,7 @@ Old 的坐标偏差达到 **km 级**，高程偏差达到 **数十米**。
 
 ### 3.2 Element-River 邻接关系
 
-![图 12：Element-River 邻接详情（12 条 river segment）](/testdata/ftbug/fig12_mesh_rivseg_detail.png)
+![图 12：Element-River 邻接详情（12 条 river segment）](../testdata/ftbug/fig12_mesh_rivseg_detail.png)
 
 **图 12 解读**：
 - 每个元素按其关联的河段着色（R1=蓝、R2=青、R3=绿、R4=紫、R5=红、R6=橙、无河段=灰）
@@ -400,7 +400,7 @@ SHUD solver 以 truth.sp.riv 为输入，route-only profile 成功运行：
 - 结束状态："The successful end."
 - 输出 247 个时间步的河道水深和流量时序
 
-![图 10：route-only 河道水深演变（10 天）](/testdata/ftbug/fig10_route_only_stage.png)
+![图 10：route-only 河道水深演变（10 天）](../testdata/ftbug/fig10_route_only_stage.png)
 
 **图 10 解读**：
 - 初始水深梯度波在第一天内快速排空（0.5–0.55m → ~0.05m），随后缓慢趋近准稳态
@@ -408,7 +408,7 @@ SHUD solver 以 truth.sp.riv 为输入，route-only profile 成功运行：
 - R1/R2（蓝/青，支流）水深最低，R3（绿，汇流段）居中
 - 物理行为合理：无外部输入下河道水量单调递减，下游因汇流而衰减更慢
 
-![图 11：route-only 下泄流量（10 天）](/testdata/ftbug/fig11_route_only_qdown.png)
+![图 11：route-only 下泄流量（10 天）](../testdata/ftbug/fig11_route_only_qdown.png)
 
 **图 11 解读**：
 - 初始爆发性排水（R6 出口 Qdown 峰值 ~4.3×10⁵ m³/min），随后指数衰减
@@ -585,6 +585,8 @@ SHUD solver 以 truth.sp.riv 为输入，route-only profile 成功运行：
 
 运行配置：route-only profile（10 天、零 forcing、初始水深梯度波），输出间隔 60 分钟，DT_DIAG_RIV = 60。
 
+> **单位说明**：SHUD 的 Print_Ctrl 对通量变量（QrivDown 等）乘以 `tau=1440`（分钟/天），因此 `.rivqdown.csv` 中的值单位为 **m³/day**（日均流量），而 `.diagriv` 中的瞬时值单位为 **m³/min**。下文的 QrivDown 数值均沿用 `.rivqdown.csv` 的 m³/day 单位，除非另行标注。
+
 5 个 case 全部成功运行（"The successful end."），每个产出 240 个时间步 × 6 条河段的 QrivDown、rivystage 和 diagriv 数据。
 
 ### 5.2 因果隔离结果——核心发现
@@ -605,7 +607,7 @@ SHUD solver 以 truth.sp.riv 为输入，route-only profile 成功运行：
 
 | 指标 | 最大绝对差 | 最大相对差 | 最大差位置 |
 |------|----------|----------|-----------|
-| QrivDown | 1.1 m³/min | 2.16×10⁻⁵ | R5, t=0 |
+| QrivDown | 1.1 m³/day | 2.16×10⁻⁵ | R5, t=0 |
 | rivystage | 7.3×10⁻⁶ m | 3.14×10⁻⁵ | R4, t=0 |
 
 因果推断：修复后 rSHUD 生成的 Slope 与独立 truth 的差异仅为 DEM 栅格插值精度级别（~10⁻⁷），在 solver 输出层面表现为 ~10⁻⁵ 量级的微小差异。**修复正确。**
@@ -614,10 +616,10 @@ SHUD solver 以 truth.sp.riv 为输入，route-only profile 成功运行：
 
 | 指标 | 最大绝对差 | 最大相对差 | 最大差位置 |
 |------|----------|----------|-----------|
-| QrivDown | **165,938 m³/min** | **357%** | R6, t=0 |
+| QrivDown | **165,938 m³/day**（≈115 m³/min ≈ 1.9 m³/s） | **357%** | R6, t=0 |
 | rivystage | **0.454 m** | **407%** | R1, t=0 |
 
-因果推断：bug 导致的 Slope 错误在 solver 输出层面造成巨量级偏差——**流量偏差达 16 万 m³/min，水位偏差达 0.45 m**。
+因果推断：bug 导致的 Slope 错误在 solver 输出层面造成显著偏差——**出口日均流量偏差约 1.9 m³/s（39%），水位偏差 0.45 m（超过真实水深 100%）**。
 
 ### 5.3 噪声地板与验收条件
 
@@ -625,7 +627,7 @@ $$\mathrm{noise}(M) = \max\left(\mathrm{diff}(\text{fixed}, \text{truth}; M),\ \
 
 | 指标 | diff(fixed, truth) | diff(point-only, fixed) | $\epsilon_{\text{abs}}$ | **noise** |
 |------|-------------------|------------------------|------------------------|-----------|
-| QrivDown | 1.1 | 0 | 10⁻⁸ | **1.1 m³/min** |
+| QrivDown | 1.1 | 0 | 10⁻⁸ | **1.1 m³/day** |
 | rivystage | 7.3×10⁻⁶ | 0 | 10⁻¹⁰ | **7.3×10⁻⁶ m** |
 
 | 条件 | 公式 | QrivDown | rivystage | 结果 |
@@ -634,7 +636,7 @@ $$\mathrm{noise}(M) = \max\left(\mathrm{diff}(\text{fixed}, \text{truth}; M),\ \
 | **B** | diff(fixed, truth) ≤ 10×noise | 1.1 ≤ 11 | 7.3e-6 ≤ 7.3e-5 | **PASS** |
 | **C** | diff(point-only, fixed) ≤ 10×noise | 0 ≤ 11 | 0 ≤ 7.3e-5 | **PASS** |
 | **D** | diff(old, fixed) ≥ 100×noise | 165,938 ≥ 110 | 0.454 ≥ 7.3e-4 | **PASS** |
-| **E** | truth R6 QrivDown > 0 | 3,358 m³/min | — | **PASS** |
+| **E** | truth R6 QrivDown > 0 | 3,358 m³/day | — | **PASS** |
 | **F** | old/truth 出口比值 ≈ $\sqrt{S_{bug}/S_{true}}$ | 实际 0.9999 vs 预测 0.201 | — | **FAIL**（见 §5.4） |
 
 ### 5.4 条件 F 分析：Manning 比值偏差的物理解释
@@ -655,7 +657,7 @@ $$\mathrm{noise}(M) = \max\left(\mathrm{diff}(\text{fixed}, \text{truth}; M),\ \
 
 #### QrivDown 时序对比
 
-![图 13：QrivDown 5-case 时序对比](/testdata/ftbug/fig13_qdown_5case.png)
+![图 13：QrivDown 5-case 时序对比](../testdata/ftbug/fig13_qdown_5case.png)
 
 **图 13 解读**：
 - 2×3 布局，每个子图为一条河段（R1–R6），Y 轴 log 尺度
@@ -667,7 +669,7 @@ $$\mathrm{noise}(M) = \max\left(\mathrm{diff}(\text{fixed}, \text{truth}; M),\ \
 
 #### 河道水深时序对比
 
-![图 14：河道水深 5-case 时序对比](/testdata/ftbug/fig14_stage_5case.png)
+![图 14：河道水深 5-case 时序对比](../testdata/ftbug/fig14_stage_5case.png)
 
 **图 14 解读**：
 - 线性 Y 轴显示水深（m），清晰展示 bug 的水位影响
@@ -678,7 +680,7 @@ $$\mathrm{noise}(M) = \max\left(\mathrm{diff}(\text{fixed}, \text{truth}; M),\ \
 
 #### 成对差异热力图
 
-![图 15：5-case 成对差异热力图](/testdata/ftbug/fig15_pairwise_diff.png)
+![图 15：5-case 成对差异热力图](../testdata/ftbug/fig15_pairwise_diff.png)
 
 **图 15 解读**：
 - 4 个面板分别为 QrivDown 绝对差、Stage 绝对差、QrivDown 相对差、Stage 相对差
@@ -693,7 +695,7 @@ $$\mathrm{noise}(M) = \max\left(\mathrm{diff}(\text{fixed}, \text{truth}; M),\ \
 
 #### 验收条件总结仪表板
 
-![图 16：验收条件总结仪表板](/testdata/ftbug/fig16_acceptance_summary.png)
+![图 16：验收条件总结仪表板](../testdata/ftbug/fig16_acceptance_summary.png)
 
 **图 16 解读**：
 - **左面板（Criteria A–D）**：柱状图显示实际差异 vs 阈值
@@ -738,11 +740,11 @@ $$\mathrm{noise}(M) = \max\left(\mathrm{diff}(\text{fixed}, \text{truth}; M),\ \
 
 ### 1. Bug 存在
 
-旧版 rSHUD 的 `FromToNode(simplify=TRUE)` 导致 6/6 河段 Slope 错误（4 段变为 0、1 段变为负值、1 段偏离 85%）。这些错误 Slope 传播到 SHUD solver，导致出口流量偏差高达 **165,938 m³/min**（357%），水位偏差 **0.454 m**（407%）。
+旧版 rSHUD 的 `FromToNode(simplify=TRUE)` 导致 6/6 河段 Slope 错误（4 段变为 0、1 段变为负值、1 段偏离 85%）。这些错误 Slope 传播到 SHUD solver，导致出口日均流量偏差高达 **1.9 m³/s（39%）**，水位偏差 **0.454 m（超过真实水深 100%）**。
 
 ### 2. Fix 正确
 
-修复后 rSHUD 的 Slope 与独立 truth baseline 差异仅 2.2×10⁻⁷（浮点精度级），solver 输出差异仅 1.1 m³/min（相对差 2×10⁻⁵）。修复在预处理层和 solver 层均经过验证。
+修复后 rSHUD 的 Slope 与独立 truth baseline 差异仅 2.2×10⁻⁷（浮点精度级），solver 输出差异仅 1.1 m³/day（相对差 2×10⁻⁵）。修复在预处理层和 solver 层均经过验证。
 
 ### 3. 污染通道 = Slope only
 
