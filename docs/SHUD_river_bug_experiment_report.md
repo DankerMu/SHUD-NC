@@ -357,21 +357,100 @@ Old 的坐标偏差达到 **km 级**，高程偏差达到 **数十米**。
 
 ---
 
-## Phase 3–5：待执行
+## Phase 3：构建最小 SHUD 输入底座
+
+### 目的
+
+构建一个极小但完整的 SHUD 输入集，使得后续 Phase 5 只需替换 `.sp.riv` 文件即可运行 5 个对比 case。
+
+### 3.1 三角形网格
+
+![图 9：SHUD 三角形网格与河网叠加](/testdata/ftbug/fig9_mesh_overview.png)
+
+**图 9 解读**：
+- 16 个三角形元素（标号 1–16），11 个节点
+- 淡蓝色填充 = 包含河段的元素，灰色 = 无河段元素
+- 河网叠加显示：蓝色 = Type 1（R1/R2/R4），绿色 = Type 2（R3），红色 = Type 3（R5/R6）
+- 河网节点（交汇点）作为 mesh 节点嵌入，确保拓扑一致性
+
+### 3.2 Element-River 邻接关系
+
+![图 12：Element-River 邻接详情（12 条 river segment）](/testdata/ftbug/fig12_mesh_rivseg_detail.png)
+
+**图 12 解读**：
+- 每个元素按其关联的河段着色（R1=蓝、R2=青、R3=绿、R4=紫、R5=红、R6=橙、无河段=灰）
+- 标注格式 `S{id}:R{reach}`，如 "S1:R1" 表示第 1 条 river segment 属于 R1
+- 12 条 rivseg 覆盖全部 6 条河段，每条河段有 2 个相邻元素
+- 关键：E2 同时关联 R3 和 R4（汇流区域），E8 同时关联 R5 和 R6（主干-出口交接区）
+
+### 3.3 两个运行 profile
+
+| 参数 | route-only | coupled |
+|------|-----------|---------|
+| 模拟时长 | 10 天 | 30 天 |
+| Forcing | 全零（无降雨、无辐射） | 第 3 天有 6 小时降雨脉冲（10 mm/hr） |
+| 初始条件 | 河道水深梯度波（头水 2m、中间 1m、出口 0.5m），GW=5m | 全零（INIT_MODE=1） |
+| 河-坡交换 | 由 solver 自动计算（全耦合） | 同左 |
+| 输出间隔 | 1 小时 | 1 小时 |
+
+### 3.4 route-only 验证运行
+
+SHUD solver 以 truth.sp.riv 为输入，route-only profile 成功运行：
+- 1440 步，0.288 秒完成
+- 结束状态："The successful end."
+- 输出 247 个时间步的河道水深和流量时序
+
+![图 10：route-only 河道水深演变（10 天）](/testdata/ftbug/fig10_route_only_stage.png)
+
+**图 10 解读**：
+- 初始水深梯度波在第一天内快速排空（0.5–0.55m → ~0.05m），随后缓慢趋近准稳态
+- R5（红）和 R6（橙）作为主干和出口，水深高于上游支流——符合汇流累积效应
+- R1/R2（蓝/青，支流）水深最低，R3（绿，汇流段）居中
+- 物理行为合理：无外部输入下河道水量单调递减，下游因汇流而衰减更慢
+
+![图 11：route-only 下泄流量（10 天）](/testdata/ftbug/fig11_route_only_qdown.png)
+
+**图 11 解读**：
+- 初始爆发性排水（R6 出口 Qdown 峰值 ~4.3×10⁵ m³/min），随后指数衰减
+- 流量层次清晰：R6（出口）> R5（主干）> R3（汇流）> R1/R2/R4（支流）
+- 10 天后全部河段趋近残余流量 ~100–3000 m³/min
+- 这个底座产生了有意义的流量差异，适合后续 5-case 对比
+
+### 3.5 Phase 3 通过条件
+
+| 检查项 | 结果 |
+|--------|------|
+| 元素数 10–20 | ✓ (16 元素) |
+| 每条 reach 至少 1 个相邻元素 | ✓ (每条 2 个，共 12 条 rivseg) |
+| 统一 soil/lc/geol | ✓ (各 1 种类型) |
+| 单一 outlet | ✓ (R6 → -3) |
+| route-only 跑通 | ✓ (1440 步, "The successful end.") |
+| 输出有物理意义 | ✓ (水深衰减、汇流累积、出口流量最大) |
+
+### 3.6 产物清单
+
+| 文件 | 说明 |
+|------|------|
+| `runs/ftbug/base/route-only/input/ftbug/` | route-only 完整输入集（15 文件） |
+| `runs/ftbug/base/coupled/input/ftbug/` | coupled 完整输入集（14 文件，无 IC） |
+| `runs/ftbug/base/route-only/output/` | route-only 验证运行输出 |
+| `testdata/ftbug/fig9–fig12.png` | Phase 3 可视化图 |
+| `tools/r/build_ftbug_shud_base.R` | 生成脚本 |
+| `tools/r/plot_ftbug_phase3.R` | 可视化脚本 |
+
+---
+
+## Phase 4–5：待执行
 
 > 以下 Phase 的详细设计见 `docs/SHUD_river_bug_experiment_plan.md`
 
-### Phase 3：构建最小 SHUD 输入底座
-
-基于合成 fixture 构建可运行的 SHUD 输入集（mesh + 参数 + forcing），两个 profile：route-only（纯河道排水）和 coupled（含降雨脉冲）。
-
-### Phase 4：Solver 只读 Diagnostics
+### Phase 4：Solver 只读 Diagnostics（可选）
 
 给 SHUD solver 增加只读诊断输出（BedSlope、QrivDown、DYriv、uYriv 等），不改计算逻辑。
 
 ### Phase 5：运行实验并比较
 
-运行 5 个 case，验证：
+运行 5 个 case（truth / fixed / old / slope-only / point-only），验证：
 - `old ≈ slope-only` → Slope 是主要污染通道
 - `point-only ≈ fixed` → @point 不影响 solver
 - `fixed ≈ truth` → 修复正确
