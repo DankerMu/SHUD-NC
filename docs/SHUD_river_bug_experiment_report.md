@@ -72,7 +72,7 @@ R4(type1) ─────────────/
 | R5 | 6 | 3 | 主干 |
 | R6 | -3 | 3 | 出口 |
 
-![图 1：合成河网总览](../testdata/ftbug/fig1_network_overview.png)
+![图 1：合成河网总览](/testdata/ftbug/fig1_network_overview.png)
 
 **图 1 解读**：
 - 蓝色 = Type 1（支流 R1、R2、R4），绿色 = Type 2（汇流段 R3），红色 = Type 3（主干 R5、出口 R6）
@@ -98,7 +98,7 @@ R4(type1) ─────────────/
 
 **Bug 触发条件验证**：`st_simplify` 以 `tol = (extent_x) × 0.01 ≈ 18 m` 简化后，362 个原始顶点被压缩到仅 **7 个**唯一端点。N/M = 362/7 ≈ **51.7×**，远超索引错配的触发阈值。
 
-![图 4：顶点密度与 simplify 效果](../testdata/ftbug/fig4_vertex_density.png)
+![图 4：顶点密度与 simplify 效果](/testdata/ftbug/fig4_vertex_density.png)
 
 **图 4 解读**：
 - 彩色点 = 原始顶点（颜色编码沿线位置），灰色线 = 原始 polyline
@@ -116,7 +116,7 @@ $$z = 2500 - 0.0006 \times (x - 500000) + 0.01 \times (y - 4200000)$$
 - 主梯度方向：y 方向（北高南低，系数 0.01），x 方向有微弱倾斜（系数 -0.0006）
 - 所有河段端点对齐到 DEM 栅格中心，DEM 提取高程与解析公式**零误差**
 
-![图 2：DEM 高程面与河网叠加](../testdata/ftbug/fig2_dem_with_rivers.png)
+![图 2：DEM 高程面与河网叠加](/testdata/ftbug/fig2_dem_with_rivers.png)
 
 **图 2 解读**：
 - 底图 = DEM 高程面，颜色从深绿（高，~2515 m）到浅黄/白（低，~2480 m）
@@ -135,7 +135,7 @@ $$z = 2500 - 0.0006 \times (x - 500000) + 0.01 \times (y - 4200000)$$
 | R5 | **0.000588** | **gentle** | 接近 MINRIVSLOPE = 4×10⁻⁴，测试 clamp 边界 |
 | R6 | **0.00992** | **steep** | 最大坡度，bug 导致的流量偏差最显著 |
 
-![图 3：各河段坡度（log 尺度）](../testdata/ftbug/fig3_slope_profile.png)
+![图 3：各河段坡度（log 尺度）](/testdata/ftbug/fig3_slope_profile.png)
 
 **图 3 解读**：
 - 柱状图为 log 纵坐标，颜色编码坡度类别：红 = steep，橙 = medium，绿 = gentle
@@ -239,7 +239,7 @@ Index Down Type Slope       Length      BC
 
 ### 2.2 坡度对比结果
 
-![图 5：坡度三方对比 — Truth vs Fixed vs Old](../testdata/ftbug/fig5_slope_comparison.png)
+![图 5：坡度三方对比 — Truth vs Fixed vs Old](/testdata/ftbug/fig5_slope_comparison.png)
 
 **图 5 解读**：
 - 绿色 = Truth（独立手算），蓝色 = Fixed（修复后 rSHUD），红色 = Old（旧版 rSHUD）
@@ -252,7 +252,7 @@ Index Down Type Slope       Length      BC
 
 ### 2.3 坡度散点图
 
-![图 7：坡度散点 — Truth vs Old（左）和 Truth vs Fixed（右）](../testdata/ftbug/fig7_slope_scatter.png)
+![图 7：坡度散点 — Truth vs Old（左）和 Truth vs Fixed（右）](/testdata/ftbug/fig7_slope_scatter.png)
 
 **图 7 解读**：
 - **右图（Truth vs Fixed）**：所有 6 个点紧贴 1:1 线，fixed 坡度 = truth 坡度，**修复正确**
@@ -264,7 +264,7 @@ Index Down Type Slope       Length      BC
 
 ### 2.4 端点坐标错配
 
-![图 6：From 端点错配 — Truth vs Old](../testdata/ftbug/fig6_point_mismatch.png)
+![图 6：From 端点错配 — Truth vs Old](/testdata/ftbug/fig6_point_mismatch.png)
 
 **图 6 解读**：
 - 绿色圆点 = 真实 From 端点位置，红色 × = old 版本 @point 记录的 From 位置
@@ -275,7 +275,7 @@ Index Down Type Slope       Length      BC
 
 ### 2.5 量化汇总
 
-![图 8：Phase 2 总结仪表板](../testdata/ftbug/fig8_phase2_summary.png)
+![图 8：Phase 2 总结仪表板](/testdata/ftbug/fig8_phase2_summary.png)
 
 **图 8 解读**：
 - **Panel 1（Slope Error）**：fixed 坡度误差 2.21×10⁻⁷（蓝，浮点精度级），old 坡度误差 9.92×10⁻³（红，4.5 个数量级差距）
