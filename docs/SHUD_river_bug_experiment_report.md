@@ -2,7 +2,7 @@
 
 > 实验分支：`exp/river-bug-verification`
 > 开始日期：2026-03-26
-> 状态：Phase 0–2 完成，Phase 3+ 进行中
+> 状态：Phase 0–4 完成，Phase 5 待执行
 
 ---
 
@@ -440,15 +440,134 @@ SHUD solver 以 truth.sp.riv 为输入，route-only profile 成功运行：
 
 ---
 
-## Phase 4–5：待执行
+## Phase 4：Solver 只读 Diagnostics
 
-> 以下 Phase 的详细设计见 `docs/SHUD_river_bug_experiment_plan.md`
+### 目的
 
-### Phase 4：Solver 只读 Diagnostics（可选）
+给 SHUD solver 增加只读诊断输出，导出 solver 内部的河道变量（BedSlope、各项通量、水深变化率），**不改任何计算逻辑**。这样可以：
 
-给 SHUD solver 增加只读诊断输出（BedSlope、QrivDown、DYriv、uYriv 等），不改计算逻辑。
+1. **验证 BedSlope 传播**：确认 solver 实际读入的 BedSlope 与 `.sp.riv` 中的 Slope 一致
+2. **追踪完整传播链**：BedSlope → Manning 方程 → QrivDown → DYriv → uYriv
+3. **为 Phase 5 因果定位提供内部证据**：不仅比较最终输出，还能看到中间变量的差异
 
-### Phase 5：运行实验并比较
+### 4.1 实现方案
+
+**原则**：只加输出，不改计算。所有 case 用同一个 instrumented binary。
+
+**改动范围**：SHUD solver 13 个源文件，+55 行，-6 行（仅签名调整）
+
+| 改动类别 | 文件 | 说明 |
+|----------|------|------|
+| 新增成员 | `Model_Data.hpp` | `double *diagRivDY`（导数缓存）、`FILE *fpDiagRiv`、`PrintDiagRiv()` |
+| 导数捕获 | `MD_f.cpp` | 在 `f_applyDY()` 中 `DY[iRIV]` 计算完成后，一行赋值 `diagRivDY[i] = DY[iRIV]` |
+| 配置解析 | `Model_Control.hpp/cpp` | 新增 `DT_DIAG_RIV` 参数（分钟），与现有 `DT_QR_*` 同级 |
+| 文件路径 | `IO.hpp/cpp` | 新增 `.diagriv` 输出路径 |
+| 输出初始化 | `MD_initialize.cpp` | 打开文件、写入 TSV header |
+| 写入逻辑 | `MD_update.cpp` | `PrintDiagRiv()` 长格式 TSV 写入 |
+| 调度 | `shud.cpp` + `Model_Control.cpp` | `ExportResults()` 按 `DT_DIAG_RIV` 间隔触发诊断输出 |
+| 清理 | `MD_readin.cpp` | `FreeData()` 中释放 `diagRivDY`、关闭 `fpDiagRiv` |
+
+**关键设计**：不使用 Print_Ctrl（它是 wide-format，一行=一个时间步），而是自定义 long-format 写入（一行=一条河道一个时间步），便于后续分析。
+
+### 4.2 输出格式
+
+文件：`<outpath>/<projectname>.diagriv`（TSV 格式）
+
+```
+# time    iRiv    BedSlope         QrivUp           QrivDown         QrivSurf    QrivSub          DYriv            uYriv
+0.0       1       8.7770745000e-03 0.0000000000e+00 4.6184669957e+00 0.00e+00    -8.7884077597e-02 -2.1658640396e-03 8.9632223534e-02
+0.0       2       8.8672420000e-03 0.0000000000e+00 4.0790077872e+00 0.00e+00    -8.3972684421e-02 -2.0082167176e-03 8.2836379293e-02
+...
+```
+
+| 列 | 含义 | 单位 |
+|----|------|------|
+| time | 模拟时间 | min |
+| iRiv | 河段编号（1-based） | — |
+| BedSlope | 河床坡度（从 `.sp.riv` 读入） | m/m |
+| QrivUp | 上游来水通量 | m³/min |
+| QrivDown | Manning 下泄流量 | m³/min |
+| QrivSurf | 河-坡地表交换 | m³/min |
+| QrivSub | 河-坡地下交换 | m³/min |
+| DYriv | 河道水深时间导数 | m/min |
+| uYriv | 当前河道水深 | m |
+
+### 4.3 验证运行
+
+使用 Phase 3 的 route-only base case（truth.sp.riv）运行，配置 `DT_DIAG_RIV = 60`（每 60 分钟输出一次）。
+
+**输出统计**：1441 行 = 1 行 header + 240 个时间步 × 6 条河段
+
+#### BedSlope 一致性验证
+
+| 河段 | truth.sp.riv Slope | .diagriv BedSlope | 一致？ |
+|------|-------------------|-------------------|--------|
+| R1 | 0.0087770745 | 8.7770745000e-03 | ✓ 精确匹配 |
+| R2 | 0.0088672420 | 8.8672420000e-03 | ✓ 精确匹配 |
+| R3 | 0.0068331939 | 6.8331939000e-03 | ✓ 精确匹配 |
+| R4 | 0.0032178838 | 3.2178838000e-03 | ✓ 精确匹配 |
+| R5 | 0.0005876630 | 5.8766300000e-04 | ✓ 精确匹配 |
+| R6 | 0.0099173117 | 9.9173117000e-03 | ✓ 精确匹配 |
+
+**结论**：solver 内部使用的 BedSlope **精确等于** `.sp.riv` 中的 Slope 值——确认了从输入文件到 Manning 方程的传播链第一环无损。
+
+#### 物理合理性检查
+
+**初始时刻（t=0 min）**：
+
+| 河段 | QrivDown | QrivUp | QrivSub | DYriv | uYriv |
+|------|----------|--------|---------|-------|-------|
+| R1 | 4.62 | 0 | -0.088 | -2.17e-3 | 0.090 |
+| R2 | 4.08 | 0 | -0.084 | -2.01e-3 | 0.083 |
+| R3 | 22.7 | -8.70 | -0.260 | -4.43e-3 | 0.188 |
+| R4 | 4.25 | 0 | -0.062 | -2.79e-3 | 0.117 |
+| R5 | 56.7 | -27.0 | -0.700 | -5.27e-3 | 0.239 |
+| R6 | 119 | -56.7 | -1.29 | -5.92e-3 | 0.307 |
+
+物理行为合理：
+- **QrivUp**：R1/R2/R4（头水段）= 0，R3 = -8.70（接收 R1+R2），R5 = -27.0（接收 R3+R4），R6 = -56.7（接收 R5）——符合拓扑
+- **QrivDown**：从上游到下游递增（R1: 4.62 → R6: 119），反映汇流累积
+- **DYriv**：全部为负（水位下降），出口 R6 下降最快（|DYriv| = 5.92e-3）
+- **QrivSurf**：全部为 0（route-only profile 无地表水交换）
+- **QrivSub**：全部为负（地下水向河道补给）
+
+**末尾时刻（t=14340 min ≈ 10 天）**：
+
+| 河段 | QrivDown | DYriv | uYriv |
+|------|----------|-------|-------|
+| R1 | 0.0860 | -1.80e-8 | 0.0079 |
+| R2 | 0.0792 | -2.73e-8 | 0.0075 |
+| R3 | 0.415 | -4.95e-8 | 0.0164 |
+| R4 | 0.0586 | -3.65e-8 | 0.0085 |
+| R5 | 1.14 | -6.53e-8 | 0.0223 |
+| R6 | 2.33 | -1.12e-7 | 0.0282 |
+
+- DYriv 降至 ~10⁻⁸ 量级——河道已接近准稳态
+- 残余流量层次 R6 > R5 > R3 > R1 ≈ R2 ≈ R4，仍保持汇流结构
+
+### 4.4 Phase 4 通过条件
+
+| 检查项 | 结果 |
+|--------|------|
+| 编译通过 | ✓ (`make clean && make shud` 成功) |
+| 零计算逻辑变更 | ✓ (仅新增输出，MD_RiverFlux.cpp 未修改) |
+| .diagriv 文件生成 | ✓ (1441 行 = 240 步 × 6 rivers + header) |
+| BedSlope = .sp.riv Slope | ✓ (6/6 河段精确匹配) |
+| 物理行为合理 | ✓ (QrivUp 符合拓扑，QrivDown 递增，DYriv → 0) |
+| 现有输出不变 | ✓ (.rivqdown.csv 等无变化) |
+
+### 4.5 产物清单
+
+| 文件 | 说明 |
+|------|------|
+| `SHUD/src/` (13 files, +55 lines) | Instrumented solver 源码 |
+| `runs/ftbug/base/route-only/output/ftbug.out/.diagriv` | 验证运行的诊断输出 |
+
+---
+
+## Phase 5：待执行
+
+> 详细设计见 `docs/SHUD_river_bug_experiment_plan.md`
 
 运行 5 个 case（truth / fixed / old / slope-only / point-only），验证：
 - `old ≈ slope-only` → Slope 是主要污染通道
